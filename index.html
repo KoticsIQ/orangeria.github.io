@@ -1,0 +1,2696 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Умная оранжерея — прототип (ИИ + камеры + мультипожар + осмотр)</title>
+<style>
+:root{
+  --bg:#f2f6f3; --panel:#ffffff; --ink:#13251b; --muted:#5f7568; --line:#dde8e1;
+  --green:#1f8a4c; --green2:#2fb36a; --green-soft:#e8f5ee;
+  --warn:#d98216; --bad:#cf3f3f; --blue:#3b7ddd; --orange:#e0663a; --teal:#1a9e8f;
+  --radius:14px; --shadow:0 1px 2px rgba(19,37,27,.05), 0 6px 18px rgba(19,37,27,.05);
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{
+  font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  background:var(--bg); color:var(--ink); font-size:14px; line-height:1.45;
+}
+h1,h2,h3,h4{margin:0; font-weight:650; letter-spacing:-.01em}
+p{margin:0}
+button{font-family:inherit; font-size:inherit; cursor:pointer}
+.muted{color:var(--muted)}
+.small{font-size:12px}
+
+.topbar{
+  position:sticky; top:0; z-index:40;
+  background:rgba(255,255,255,.92); backdrop-filter:blur(8px);
+  border-bottom:1px solid var(--line);
+  padding:10px 20px; display:flex; gap:18px; align-items:center; flex-wrap:wrap;
+}
+.brand{display:flex; gap:11px; align-items:center; margin-right:auto}
+.logo{
+  width:38px;height:38px;border-radius:11px; display:grid;place-items:center; font-size:20px;
+  background:linear-gradient(145deg,#2fb36a,#187a43); color:#fff;
+  box-shadow:0 4px 12px rgba(31,138,76,.35);
+}
+.brand h1{font-size:16px}
+.brand .sub{font-size:11.5px; color:var(--muted)}
+.ctrl{display:flex; align-items:center; gap:8px}
+.ctrl label{font-size:12px; color:var(--muted)}
+select, .btn{
+  border:1px solid var(--line); background:#fff; color:var(--ink);
+  padding:7px 11px; border-radius:9px; outline:none;
+}
+select:focus{box-shadow:0 0 0 3px rgba(47,179,106,.18); border-color:var(--green2)}
+.btn:hover{background:#f6faf7}
+.btn.primary{background:var(--green); color:#fff; border-color:var(--green)}
+.btn.primary:hover{background:#1a7b44}
+.btn.danger{background:#fdeeee; border-color:#f3cfcf; color:#a92c2c}
+.btn.sm{padding:4px 9px; font-size:12px; border-radius:8px}
+.seg{display:flex; border:1px solid var(--line); border-radius:9px; overflow:hidden; background:#fff}
+.seg button{border:0; background:transparent; padding:7px 12px; color:var(--muted)}
+.seg button.on{background:var(--green-soft); color:var(--green); font-weight:600}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--green2);display:inline-block;margin-right:6px}
+.dot.pulse{animation:pulse 1.8s infinite}
+@keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(47,179,106,.5)}50%{box-shadow:0 0 0 6px rgba(47,179,106,0)}}
+.conn{font-size:12px;color:var(--muted);display:flex;align-items:center}
+
+.tabs{display:flex; gap:4px; padding:10px 20px 0; flex-wrap:wrap}
+.tabs button{
+  border:1px solid transparent; background:transparent; color:var(--muted);
+  padding:8px 14px; border-radius:10px 10px 0 0; font-weight:550;
+}
+.tabs button.on{background:#fff; color:var(--ink); border-color:var(--line); border-bottom-color:#fff; margin-bottom:-1px}
+main{padding:0 20px 40px}
+.pane{display:none}
+.pane.on{display:block; animation:fade .18s ease}
+@keyframes fade{from{opacity:0; transform:translateY(3px)}to{opacity:1;transform:none}}
+
+.card{
+  background:var(--panel); border:1px solid var(--line); border-radius:var(--radius);
+  box-shadow:var(--shadow); padding:16px;
+}
+.kpis{display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:12px; margin-bottom:14px}
+.kpi{padding:14px 16px}
+.kpi .lbl{font-size:12px; color:var(--muted)}
+.kpi .num{font-size:24px; font-weight:700; margin-top:2px}
+.kpi .num small{font-size:12px; font-weight:500; color:var(--muted)}
+
+.zones{display:grid; grid-template-columns:repeat(auto-fit,minmax(380px,1fr)); gap:12px; margin-bottom:14px}
+.zone-head{display:flex; justify-content:space-between; align-items:flex-start; gap:10px; margin-bottom:12px}
+.zone-head h3{font-size:14.5px}
+.zone-head p{font-size:12px; color:var(--muted); margin-top:2px}
+.chip{
+  font-size:11.5px; font-weight:600; padding:4px 9px; border-radius:999px;
+  background:var(--green-soft); color:var(--green); white-space:nowrap;
+}
+.chip.warn{background:#fdf1dd; color:#a5680d}
+.chip.bad{background:#fdeaea; color:#b02b2b}
+.chip.fault{background:#eef0f2; color:#5a6a75}
+.chip.inspect{background:#e7f0fb; color:#2f5fa8}
+.chip.fire{background:#ffe5e5; color:#c62828; animation:pulseFire 1.4s infinite}
+
+.inspect-bar{
+  display:flex; flex-wrap:wrap; gap:6px; align-items:center;
+  background:#fdf7ea; border:1px solid #f0dfb8; border-radius:10px;
+  padding:8px 10px; font-size:12.5px; margin-bottom:10px; color:#7a560f;
+}
+.inspect-bar.hidden{display:none}
+.reason{background:#fff; border:1px solid #f0dfb8; border-radius:99px; padding:1px 8px; font-size:11.5px}
+
+.sensors{display:grid; grid-template-columns:repeat(3,1fr); gap:10px}
+.sensor{background:#f8fbf9; border:1px solid #e8f0eb; border-radius:10px; padding:9px 10px}
+.sensor-top{display:flex; justify-content:space-between; font-size:11.5px; color:var(--muted)}
+.sensor-val{font-size:19px; font-weight:700; margin:2px 0 5px; letter-spacing:-.02em}
+.sensor-val span{font-size:11px; font-weight:500; color:var(--muted); margin-left:2px}
+.bar{height:5px; background:#e6eee9; border-radius:99px; overflow:hidden}
+.bar i{display:block; height:100%; width:0; border-radius:99px; background:var(--green2); transition:width .5s ease, background .3s}
+.bar i.warn{background:#e8a13a}
+.bar i.bad{background:#d95454}
+.bar i.fault{background:#b9c4bf}
+.sensor-range{font-size:10.5px; color:#93a69b; margin-top:5px}
+.sensor-badge{font-size:10px; color:#93a69b; margin-top:3px}
+
+.act-row{display:grid; grid-template-columns:repeat(auto-fit,minmax(60px,1fr)); gap:8px; margin-top:12px}
+.act{
+  border:1px solid var(--line); background:#fff; border-radius:10px; padding:8px 4px;
+  display:flex; flex-direction:column; align-items:center; gap:3px; color:var(--muted);
+  transition:.15s;
+}
+.act:hover{background:#f6faf7}
+.act .ico{font-size:15px; filter:grayscale(1); opacity:.6}
+.act .nm{font-size:10.5px; text-align:center}
+.act .st{font-size:10px; font-weight:700; color:#9aa9a1}
+.act.on{background:var(--green-soft); border-color:#a9dcc2; color:var(--green)}
+.act.on .ico{filter:none; opacity:1}
+.act.on .st{color:var(--green)}
+.act.faulty{border-color:#c62828; background:#fff5f5;}
+.act.faulty .st{color:#c62828}
+.act:disabled{cursor:not-allowed; opacity:.55}
+
+.grid2{display:grid; grid-template-columns:1.55fr 1fr; gap:12px}
+@media(max-width:900px){.grid2{grid-template-columns:1fr}}
+.chart-wrap{height:250px; margin-top:6px; position:relative}
+canvas{display:block; width:100%; height:100%}
+.legend{display:flex; gap:16px; font-size:12px; color:var(--muted); margin-top:8px; flex-wrap:wrap}
+.legend i{display:inline-block; width:12px; height:3px; border-radius:2px; margin-right:6px; vertical-align:middle}
+
+.log{max-height:330px; overflow:auto; font-size:12.5px}
+.log-row{display:flex; gap:9px; padding:7px 2px; border-bottom:1px dashed #ecf2ee}
+.log-row:last-child{border-bottom:0}
+.log-time{color:#96a89e; font-variant-numeric:tabular-nums; white-space:nowrap}
+.log-tag{width:7px;height:7px;border-radius:50%;margin-top:6px;flex:none;background:#9aa9a1}
+.log-tag.warn{background:#e8a13a} .log-tag.bad{background:#d95454} .log-tag.ok{background:var(--green2)}
+
+/* Камеры */
+.cams{display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:10px}
+.cam{position:relative; border-radius:12px; overflow:hidden; border:1px solid #1f2a24; background:#0c1410}
+.cam canvas{display:block; width:100%; height:auto}
+
+.plants{display:grid; grid-template-columns:repeat(auto-fill,minmax(280px,1fr)); gap:12px}
+.plant{cursor:pointer; transition:.15s; border-left:4px solid var(--green2); padding:12px}
+.plant:hover{transform:translateY(-2px); box-shadow:0 8px 22px rgba(19,37,27,.1)}
+.plant.watch{border-left-color:#e8a13a}
+.plant.sick{border-left-color:var(--bad)}
+.plant.postfire{border-left-color:#c62828}
+.plant.inspect{border-left-color:#3b7ddd}
+.plant.rest{border-left-color:#8fa4b8}
+.plant-row{display:flex; gap:11px; align-items:flex-start}
+.thumb{width:76px; height:76px; border-radius:10px; border:1px solid var(--line); flex:none; background:#f4f8f5}
+.plant h4{font-size:13.5px; margin-bottom:2px}
+.plant .lat{font-size:11.5px; color:var(--muted); font-style:italic; margin-bottom:8px}
+.plant .meta{font-size:12px; color:var(--muted); display:flex; gap:6px; flex-wrap:wrap}
+.tag{font-size:10.5px; padding:2px 8px; border-radius:99px; background:#f0f5f2; color:#5f7568; font-weight:600}
+.tag.ok{background:var(--green-soft); color:var(--green)}
+.tag.watch{background:#fdf1dd; color:#a5680d}
+.tag.sick{background:#fdeaea; color:#b02b2b}
+.tag.fire{background:#ffe5e5; color:#c62828}
+.tag.inspect{background:#e7f0fb; color:#2f5fa8}
+.tag.rest{background:#eef2f6; color:#5a6f85}
+
+.overlay{position:fixed; inset:0; background:rgba(15,32,22,.45); display:none; z-index:80; align-items:center; justify-content:center; padding:20px}
+.overlay.on{display:flex}
+.modal{background:#fff; border-radius:16px; max-width:780px; width:100%; max-height:90vh; overflow:auto; padding:22px; box-shadow:0 24px 60px rgba(0,0,0,.25)}
+.modal h3{font-size:17px; margin-bottom:2px}
+.modal .close{float:right; border:0; background:#f1f5f2; border-radius:8px; padding:5px 10px; color:var(--muted)}
+.field{display:flex; gap:10px; padding:7px 0; border-bottom:1px dashed #eef3ef; font-size:13px}
+.field b{min-width:160px; color:var(--muted); font-weight:550}
+.hist{font-size:12.5px; padding:6px 0 6px 12px; border-left:2px solid #e2ece6; margin-left:4px}
+.dis-list{list-style:none; padding:0; margin:6px 0 0; font-size:13px}
+.dis-list li{padding:5px 0; border-bottom:1px dashed #eef3ef; display:flex; gap:8px; align-items:baseline}
+.dis-list li:last-child{border-bottom:0}
+.dis-list li.active{color:#a92c2c; font-weight:600}
+
+.photo-grid{display:grid; grid-template-columns:1fr 1fr; gap:12px; margin:14px 0}
+@media(max-width:560px){.photo-grid{grid-template-columns:1fr}}
+.slot{border:1px solid var(--line); border-radius:12px; padding:10px; background:#fbfdfb}
+.slot-head{display:flex; justify-content:space-between; align-items:center; gap:6px; margin-bottom:8px}
+.slot-head b{font-size:12.5px}
+.slot-canvas{width:100%; aspect-ratio:1/1; height:auto; border-radius:10px; border:1px solid var(--line); background:#f4f8f5; display:block}
+.slot-actions{display:flex; gap:6px; margin-top:8px; flex-wrap:wrap}
+.sev{height:7px; background:#e6eee9; border-radius:99px; overflow:hidden; margin:6px 0 4px}
+.sev i{display:block; height:100%; background:linear-gradient(90deg,#e8a13a,#d95454); width:0; transition:width .4s}
+.disease-panel{margin-top:14px; background:#fbfdfb; box-shadow:none}
+
+.drop{
+  border:2px dashed #cfe0d6; border-radius:12px; padding:22px; text-align:center;
+  background:#f9fcfb; transition:.15s; cursor:pointer;
+}
+.drop:hover,.drop.hover{border-color:var(--green2); background:var(--green-soft)}
+.drop .big{font-size:26px}
+.result-head{display:flex; align-items:center; gap:10px; margin-bottom:10px}
+.conf{height:7px; background:#e6eee9; border-radius:99px; overflow:hidden; margin:6px 0 4px}
+.conf i{display:block; height:100%; background:linear-gradient(90deg,#2fb36a,#1f8a4c); width:0; transition:width .6s}
+.finding{border-radius:10px; padding:10px 12px; margin-bottom:8px; font-size:13px; border:1px solid}
+.finding.ok{background:#f0faf4; border-color:#c6e8d5}
+.finding.mid{background:#fdf7ea; border-color:#f0dfb8}
+.finding.high{background:#fdf0f0; border-color:#f2cccc}
+.finding b{display:block; margin-bottom:3px}
+.disclaimer{background:#f4f7f9; border-left:3px solid #8fa4b8; padding:10px 12px; border-radius:8px; font-size:12.5px; color:#4a5f70}
+.preview{width:100%; max-width:260px; border-radius:12px; border:1px solid var(--line); background:#eef2ef}
+
+.plan{width:100%; height:auto; background:#fff; border-radius:12px; border:1px solid var(--line)}
+.plan text{font-family:inherit; font-size:13px; fill:#2c4a38; font-weight:600}
+.plan text.sm{font-size:10.5px; font-weight:400; fill:#6b8377}
+table{width:100%; border-collapse:collapse; font-size:13px}
+th,td{text-align:left; padding:8px 10px; border-bottom:1px solid #eef3ef}
+th{font-size:11.5px; text-transform:uppercase; letter-spacing:.04em; color:var(--muted); font-weight:650}
+tfoot td{font-weight:700; border-top:2px solid var(--line)}
+.num-cell{text-align:right; font-variant-numeric:tabular-nums; white-space:nowrap}
+
+#toasts{position:fixed; right:16px; bottom:16px; display:flex; flex-direction:column; gap:9px; z-index:100; max-width:360px}
+.toast{
+  background:#fff; border:1px solid var(--line); border-left:4px solid var(--green2);
+  border-radius:11px; padding:11px 13px; box-shadow:0 10px 30px rgba(19,37,27,.16);
+  animation:slide .22s ease;
+}
+.toast.warn{border-left-color:#e8a13a} .toast.bad{border-left-color:#d95454} .toast.info{border-left-color:#3b7ddd}
+.toast.out{opacity:0; transform:translateX(20px); transition:.35s}
+.toast-title{font-weight:650; font-size:13px; margin-bottom:2px}
+.toast-text{font-size:12px; color:var(--muted)}
+@keyframes slide{from{opacity:0; transform:translateX(24px)}to{opacity:1; transform:none}}
+
+body[data-role="student"] .specialist-only{opacity:.5; pointer-events:none}
+.banner{
+  background:linear-gradient(90deg,#e8f5ee,#f4faf6); border:1px solid #cfe8da;
+  border-radius:12px; padding:11px 14px; font-size:12.5px; color:#2c6a48; margin-bottom:14px;
+  display:flex; gap:10px; align-items:flex-start;
+}
+.fire-banner{
+  background:#c62828; color:#fff; padding:12px 20px; font-weight:700; text-align:center;
+  border-radius:10px; margin-bottom:14px; box-shadow:0 4px 12px rgba(198,40,40,.3);
+  display:none;
+}
+.fire-banner.on{display:block; animation:pulseFire 1.5s infinite}
+@keyframes pulseFire{0%,100%{box-shadow:0 4px 12px rgba(198,40,40,.3)}50%{box-shadow:0 4px 24px rgba(198,40,40,.7)}}
+</style>
+</head>
+<body data-role="specialist">
+
+<header class="topbar">
+  <div class="brand">
+    <div class="logo">🌿</div>
+    <div>
+      <h1>Умная оранжерея · 60 м²</h1>
+      <div class="sub">Прототип: ИИ-диагностика · видеонаблюдение · мультипожар · осмотр специалиста</div>
+    </div>
+  </div>
+  <div class="ctrl">
+    <label for="role">Роль:</label>
+    <select id="role">
+      <option value="specialist">Специалист (полный доступ)</option>
+      <option value="student">Обучающийся (только просмотр)</option>
+    </select>
+  </div>
+  <div class="ctrl">
+    <label>Режим:</label>
+    <div class="seg" id="modeSeg">
+      <button data-mode="auto" class="on">Авто</button>
+      <button data-mode="manual">Ручной</button>
+    </div>
+  </div>
+  <div class="conn"><span class="dot pulse"></span>контроллер онлайн</div>
+</header>
+
+<nav class="tabs" id="tabs">
+  <button data-tab="dash" class="on">Микроклимат</button>
+  <button data-tab="plants">Растения и паспорта</button>
+  <button data-tab="diag">Диагностика по фото</button>
+  <button data-tab="plan">План оранжереи</button>
+  <button data-tab="econ">Себестоимость</button>
+</nav>
+
+<main>
+
+<!-- ============ DASHBOARD ============ -->
+<section class="pane on" id="pane-dash">
+  <div id="fireBanner" class="fire-banner"></div>
+
+  <div class="kpis">
+    <div class="card kpi"><div class="lbl">Зон микроклимата</div><div class="num">3</div></div>
+    <div class="card kpi"><div class="lbl">Растений под наблюдением</div><div class="num">7</div></div>
+    <div class="card kpi"><div class="lbl">Отклонений сейчас</div><div class="num" id="kpiAlerts">0</div></div>
+    <div class="card kpi"><div class="lbl">Последнее обновление</div><div class="num" id="kpiTime" style="font-size:19px">—</div></div>
+  </div>
+
+  <div class="zones" id="zones"></div>
+
+  <div class="grid2">
+    <div class="card">
+      <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap">
+        <div>
+          <h3>Динамика параметров</h3>
+          <p class="small muted">Окно наблюдения — 90 последних измерений</p>
+        </div>
+        <div class="seg" id="chartZone">
+          <button data-z="A" class="on">Зона A</button>
+          <button data-z="B">Зона B</button>
+          <button data-z="C">Зона C</button>
+        </div>
+      </div>
+      <div class="chart-wrap"><canvas id="chart"></canvas></div>
+      <div class="legend">
+        <span><i style="background:#e0663a"></i>температура, °C</span>
+        <span><i style="background:#3b7ddd"></i>влажность воздуха, %</span>
+        <span><i style="background:#1a9e8f"></i>влажность почвы, %</span>
+        <span><i style="background:#8e6fd8"></i>CO₂, ppm /10</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px">
+        <h3>Журнал событий</h3>
+        <span class="small muted">все действия протоколируются</span>
+      </div>
+      <div class="log" id="log"></div>
+    </div>
+  </div>
+
+  <!-- Видеонаблюдение -->
+  <div class="card" style="margin-top:12px">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; gap:10px; flex-wrap:wrap">
+      <h3>Видеонаблюдение</h3>
+      <span class="small muted">Прототип: видеопоток не транслируется — изображение пустое</span>
+    </div>
+    <div class="cams">
+      <div class="cam"><canvas data-cam="A" width="480" height="270"></canvas></div>
+      <div class="cam"><canvas data-cam="B" width="480" height="270"></canvas></div>
+      <div class="cam"><canvas data-cam="C" width="480" height="270"></canvas></div>
+    </div>
+  </div>
+
+  <!-- Панель отказов датчиков -->
+  <div class="card" style="margin-top:12px">
+    <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center">
+      <h3 style="margin-right:auto">Моделирование отказов датчиков</h3>
+      <select id="faultZone">
+        <option value="A">Зона A</option>
+        <option value="B">Зона B</option>
+        <option value="C">Зона C</option>
+      </select>
+      <select id="faultSensor"></select>
+      <select id="faultType">
+        <option value="dropout">Отказ (нет данных)</option>
+        <option value="stuck">Застывшее значение</option>
+        <option value="drift">Дрейф (постепенное отклонение)</option>
+      </select>
+      <button class="btn specialist-only" id="btnApplyFault">Применить отказ</button>
+      <button class="btn specialist-only" id="btnClearFaults">Сбросить все отказы датчиков</button>
+    </div>
+  </div>
+
+  <!-- Панель отказов оборудования -->
+  <div class="card" style="margin-top:12px">
+    <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center">
+      <h3 style="margin-right:auto">Моделирование отказов оборудования</h3>
+      <select id="actFaultZone">
+        <option value="A">Зона A</option>
+        <option value="B">Зона B</option>
+        <option value="C">Зона C</option>
+      </select>
+      <select id="actFaultKey"></select>
+      <select id="actFaultType">
+        <option value="off">Не включается</option>
+        <option value="on">Не выключается</option>
+      </select>
+      <button class="btn specialist-only" id="btnApplyActFault">Применить отказ</button>
+      <button class="btn specialist-only" id="btnClearActFaults">Сбросить все отказы оборудования</button>
+    </div>
+    <p class="small muted" style="margin-top:8px">
+      При отказе исполнительного устройства автоматика не сможет поддерживать параметры — потребуется вмешательство специалиста.
+    </p>
+  </div>
+
+  <!-- Панель пожарной безопасности -->
+  <div class="card" style="margin-top:12px; border-color:#e8c4c4; background:#fff8f8;">
+    <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center">
+      <h3 style="margin-right:auto; color:#c62828;">Пожарная безопасность</h3>
+      <select id="fireZoneSel">
+        <option value="A">Зона A</option>
+        <option value="B">Зона B</option>
+        <option value="C">Зона C</option>
+      </select>
+      <button class="btn specialist-only" id="btnStartFire" style="background:#c62828; color:#fff; border-color:#c62828;">Смоделировать пожар</button>
+      <button class="btn specialist-only" id="btnReset">Сбросить демонстрацию</button>
+    </div>
+    <div id="fireStatus" style="margin-top:10px"></div>
+    <p class="small muted" style="margin-top:8px">
+      Возгорание возможно сразу в нескольких зонах. Тушение выполняет <b>автоматическая система пожаротушения</b>.
+      Специалист требуется <b>после тушения</b> — для осмотра зоны и растений, а также при подозрениях нейросети и болезнях.
+    </p>
+  </div>
+</section>
+
+<!-- ============ PLANTS ============ -->
+<section class="pane" id="pane-plants">
+  <div class="banner">
+    <span>⚖️</span>
+    <div>
+      Перечень видов согласуется со специалистом по актуальной редакции Красной книги Челябинской области.
+      Посадочный материал получается <b>законно</b> — по договору с ботаническим садом / питомником или из собственной
+      реинтродукционной коллекции. Самовольное изъятие растений из природы запрещено.
+    </div>
+  </div>
+
+  <div class="card" style="margin-bottom:12px">
+    <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap">
+      <div>
+        <h3>Симулятор заболеваний</h3>
+        <p class="small muted">Симуляция болезни требует осмотра специалистом в соответствующей зоне</p>
+      </div>
+      <div style="display:flex; gap:8px; flex-wrap:wrap">
+        <select id="simPlant"></select>
+        <select id="simDisease"></select>
+        <button class="btn primary specialist-only" id="simApply">Смоделировать</button>
+        <button class="btn specialist-only" id="simHealAll">Вылечить все</button>
+      </div>
+    </div>
+    <div id="simActive" style="margin-top:12px"></div>
+  </div>
+
+  <div class="plants" id="plants"></div>
+</section>
+
+<!-- ============ DIAGNOSTICS ============ -->
+<section class="pane" id="pane-diag">
+  <div class="banner">
+    <span>🧠</span>
+    <div>
+      Модуль использует свёрточную нейросеть <b>GreenhouseNet v1.2 (CNN)</b> для предварительной оценки состояния растения по фотографии.
+      Инференс: edge-ускоритель Coral USB (основной) / облако (резервный). При подозрении зона отмечается для осмотра специалистом.
+    </div>
+  </div>
+
+  <div class="grid2">
+    <div class="card">
+      <h3 style="margin-bottom:10px">1. Загрузите фотографию растения</h3>
+      <div class="drop" id="drop">
+        <div class="big">📷</div>
+        <div style="margin-top:6px"><b>Перетащите файл</b> или нажмите для выбора</div>
+        <div class="small muted" style="margin-top:4px">JPG / PNG, лист или растение целиком</div>
+        <input type="file" id="file" accept="image/*" hidden>
+      </div>
+      <div class="small muted" style="margin-top:8px">
+        Модель: <b>GreenhouseNet v1.2 (CNN)</b> · инференс: Coral USB / облако · ср. время: ~120 мс
+      </div>
+      <div style="display:flex; gap:8px; margin-top:12px; flex-wrap:wrap">
+        <button class="btn" data-demo="healthy">Демо: здоровое</button>
+        <button class="btn" data-demo="chlorosis">Демо: хлороз</button>
+        <button class="btn" data-demo="necrosis">Демо: некроз</button>
+        <button class="btn" data-demo="spots">Демо: пятна</button>
+        <button class="btn" data-demo="rust">Демо: ржавчина</button>
+        <button class="btn" data-demo="powdery">Демо: мучнистая роса</button>
+      </div>
+      <div style="margin-top:14px">
+        <canvas id="preview" class="preview" width="320" height="320" style="display:none"></canvas>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3 style="margin-bottom:10px">2. Предварительная оценка нейросети</h3>
+      <div id="diagEmpty" class="muted small">Загрузите изображение или нажмите «Демо», чтобы увидеть работу модуля.</div>
+      <div id="diagResult" style="display:none"></div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:12px">
+    <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center">
+      <h3 style="margin-right:auto">3. Записать результат в цифровой паспорт</h3>
+      <select id="diagPlant"></select>
+      <button class="btn primary" id="btnSaveDiag">Записать наблюдение</button>
+    </div>
+    <p class="small muted" style="margin-top:8px">Запись попадёт в историю растения. Лечение автоматически не назначается.</p>
+  </div>
+</section>
+
+<!-- ============ PLAN ============ -->
+<section class="pane" id="pane-plan">
+  <div class="card">
+    <h3 style="margin-bottom:4px">Схема размещения · 10 × 6 м = 60 м², высота потолков 3 м</h3>
+    <p class="small muted" style="margin-bottom:12px">Три микроклиматические зоны, технологический проход шириной 1,2 м, рабочее место исследователя.</p>
+
+    <svg class="plan" viewBox="0 0 620 380" xmlns="http://www.w3.org/2000/svg">
+      <rect x="8" y="8" width="604" height="364" rx="10" fill="#fbfdfb" stroke="#cfe0d5" stroke-width="2"/>
+
+      <rect x="24" y="24" width="182" height="152" rx="9" fill="#e8f5ee" stroke="#8ecdaa" stroke-width="1.6"/>
+      <text x="115" y="70" text-anchor="middle">Зона A</text>
+      <text x="115" y="88" text-anchor="middle" class="sm">тёплая влажная</text>
+      <text x="115" y="104" text-anchor="middle" class="sm">орхидеи · 7,5 м²</text>
+      <circle cx="50" cy="138" r="6" fill="#3b7ddd"/><text x="62" y="142" class="sm">SHT31</text>
+      <circle cx="50" cy="156" r="6" fill="#1a9e8f"/><text x="62" y="160" class="sm">SEN0602</text>
+      <circle cx="150" cy="138" r="6" fill="#8e6fd8"/><text x="162" y="142" class="sm">MH-Z19B</text>
+
+      <rect x="219" y="24" width="182" height="152" rx="9" fill="#eef6f1" stroke="#8ecdaa" stroke-width="1.6"/>
+      <text x="310" y="70" text-anchor="middle">Зона B</text>
+      <text x="310" y="88" text-anchor="middle" class="sm">умеренная лесная</text>
+      <text x="310" y="104" text-anchor="middle" class="sm">7,5 м²</text>
+      <circle cx="245" cy="138" r="6" fill="#3b7ddd"/><text x="257" y="142" class="sm">SHT31</text>
+      <circle cx="245" cy="156" r="6" fill="#1a9e8f"/><text x="257" y="160" class="sm">SEN0602</text>
+
+      <rect x="414" y="24" width="182" height="152" rx="9" fill="#f4f8ec" stroke="#b6cf8a" stroke-width="1.6"/>
+      <text x="505" y="70" text-anchor="middle">Зона C</text>
+      <text x="505" y="88" text-anchor="middle" class="sm">сухая светлая</text>
+      <text x="505" y="104" text-anchor="middle" class="sm">степные виды · 7,5 м²</text>
+      <circle cx="440" cy="138" r="6" fill="#3b7ddd"/><text x="452" y="142" class="sm">SHT31</text>
+      <circle cx="440" cy="156" r="6" fill="#1a9e8f"/><text x="452" y="160" class="sm">SEN0602</text>
+      <circle cx="540" cy="138" r="6" fill="#8e6fd8"/><text x="552" y="142" class="sm">SGP30</text>
+
+      <rect x="24" y="188" width="572" height="52" rx="8" fill="#f6f9f6" stroke="#dfeae3" stroke-dasharray="6 5"/>
+      <text x="310" y="219" text-anchor="middle" class="sm">технологический проход 1,2 м</text>
+
+      <rect x="24" y="252" width="200" height="104" rx="9" fill="#eef3f8" stroke="#b9cde0" stroke-width="1.5"/>
+      <text x="124" y="288" text-anchor="middle">Рабочее место</text>
+      <text x="124" y="306" text-anchor="middle" class="sm">микроскоп, ноутбук,</text>
+      <text x="124" y="321" text-anchor="middle" class="sm">исследования</text>
+
+      <rect x="238" y="252" width="180" height="104" rx="9" fill="#f2f6f3" stroke="#c9dccf" stroke-width="1.5"/>
+      <text x="328" y="288" text-anchor="middle">Стеллаж</text>
+      <text x="328" y="306" text-anchor="middle" class="sm">субстраты, ёмкости,</text>
+      <text x="328" y="321" text-anchor="middle" class="sm">инвентарь</text>
+
+      <rect x="432" y="252" width="164" height="104" rx="9" fill="#fdf3ec" stroke="#e8c3a6" stroke-width="1.5"/>
+      <text x="514" y="288" text-anchor="middle">Технический шкаф</text>
+      <text x="514" y="306" text-anchor="middle" class="sm">контроллер ESP32,</text>
+      <text x="514" y="321" text-anchor="middle" class="sm">реле, насос, ИБП</text>
+
+      <line x1="612" y1="200" x2="612" y2="228" stroke="#fbfdfb" stroke-width="2" />
+      <path d="M 612 200 A 28 28 0 0 0 584 228 L 612 228 Z" fill="#e8f5ee" stroke="#8ecdaa" stroke-width="1.5"/>
+      <text x="578" y="218" text-anchor="end" class="sm" style="fill:#6b8377">вход</text>
+    </svg>
+  </div>
+
+  <div class="grid2" style="margin-top:12px">
+    <div class="card">
+      <h3 style="margin-bottom:8px">Зонирование и обоснование</h3>
+      <table>
+        <thead><tr><th>Зона</th><th>Условия</th><th>Виды</th></tr></thead>
+        <tbody>
+          <tr><td><b>A</b></td><td>t 19–25 °C, RH 55–80 %, притенение</td><td>Венерин башмачок настоящий и крупноцветковый</td></tr>
+          <tr><td><b>B</b></td><td>t 16–22 °C, RH 45–70 %, рассеянный свет</td><td>Ятрышник шлемоносный, любка двулистная</td></tr>
+          <tr><td><b>C</b></td><td>t 20–27 °C, RH 30–50 %, максимум света</td><td>Ковыль перистый, тюльпан Биберштейна, адонис весенний</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="card">
+      <h3 style="margin-bottom:8px">Сезонность и периоды покоя</h3>
+      <ul style="margin:0; padding-left:18px; font-size:13px; color:#3a5347">
+        <li>Для каждого вида в паспорте задаётся <b>сезонный профиль</b>: температуры и полива различаются для вегетации и покоя.</li>
+        <li>В период покоя снижаются полив и температура, отключается досвечивание — настройки меняются календарём.</li>
+        <li>Система напоминает о плановой смене режима и фиксирует факт перехода в журнале.</li>
+        <li>Изменение критических настроек доступно только специалисту; обучающиеся работают в режиме наблюдений.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ============ ECONOMICS ============ -->
+<section class="pane" id="pane-econ">
+  <div class="grid2">
+    <div class="card">
+      <h3 style="margin-bottom:8px">Оснащение (разовые затраты)</h3>
+      <table>
+        <thead><tr><th>Позиция</th><th class="num-cell">Кол-во</th><th class="num-cell">Цена, ₽</th><th class="num-cell">Сумма, ₽</th></tr></thead>
+        <tbody id="costBody"></tbody>
+        <tfoot><tr><td colspan="3">Итого оснащение</td><td class="num-cell" id="costTotal">—</td></tr></tfoot>
+      </table>
+    </div>
+
+    <div>
+      <div class="card" style="margin-bottom:12px">
+        <h3 style="margin-bottom:8px">Эксплуатация, ₽/мес</h3>
+        <table>
+          <tbody id="opBody"></tbody>
+          <tfoot><tr><td>Итого в месяц</td><td class="num-cell" id="opTotal">—</td></tr></tfoot>
+        </table>
+        <p class="small muted" style="margin-top:10px">
+          Расчёт при тарифе 5,2 ₽/кВт·ч и 45 ₽/м³ воды. Учтены затраты на нейросетевой инференс, видеонаблюдение и обслуживание системы пожаротушения.
+        </p>
+      </div>
+
+      <div class="card">
+        <h3 style="margin-bottom:8px">Технологический стек</h3>
+        <div style="display:flex; gap:6px; flex-wrap:wrap">
+          <span class="tag">ESP32 / Raspberry Pi</span>
+          <span class="tag">MicroPython</span>
+          <span class="tag">MQTT</span>
+          <span class="tag">Python · FastAPI</span>
+          <span class="tag">SQLite / PostgreSQL</span>
+          <span class="tag">HTML + JS</span>
+          <span class="tag">OpenCV / TensorFlow Lite</span>
+          <span class="tag">Coral USB / Jetson Nano</span>
+          <span class="tag">RTSP / NVR</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:12px">
+    <h3 style="margin-bottom:8px">Конкретные датчики и оборудование</h3>
+    <table>
+      <thead><tr><th>Назначение</th><th>Модель / тип</th><th>Параметры</th></tr></thead>
+      <tbody>
+        <tr><td>Температура и влажность воздуха</td><td>Sensirion SHT31</td><td>±0,3 °C, ±2 % RH, I²C</td></tr>
+        <tr><td>Влажность и температура почвы + EC</td><td>DFRobot SEN0602 (RS485 Modbus)</td><td>IP68, 0–100 % VWC, EC 0–10000 µS/см</td></tr>
+        <tr><td>NPK + pH (состав почвы)</td><td>Sentec SEM2252 / 7-в-1 RS485</td><td>N-P-K 0–1999 мг/кг, pH 0–14, ±2 % FS</td></tr>
+        <tr><td>CO₂</td><td>Winsen MH-Z19B (NDIR)</td><td>0–5000 ppm, ±50 ppm</td></tr>
+        <tr><td>TVOC / eCO₂</td><td>Sensirion SGP30</td><td>TVOC 0–60000 ppb, eCO₂ 400–60000 ppm</td></tr>
+        <tr><td>Освещённость</td><td>BH1750</td><td>1–65535 лк, I²C</td></tr>
+        <tr><td>Дым и тепло (пожар)</td><td>MQ-2 / терморезистор</td><td>обнаружение возгорания</td></tr>
+        <tr><td>Видеокамеры</td><td>ESP32-CAM / IP-камера (RTSP)</td><td>3 шт., обзор зон A/B/C</td></tr>
+        <tr><td>Видеорегистратор</td><td>NVR + HDD</td><td>запись и хранение видео</td></tr>
+        <tr><td>Полив</td><td>Мембранный насос 12 В (12VDC 370)</td><td>10 Вт, капельная линия</td></tr>
+        <tr><td>Досвечивание</td><td>Фитолампы ЭРА FITO-9W-Ra90-T8 / FITO-50W-LED</td><td>полный спектр, IP65</td></tr>
+        <tr><td>Вентиляция</td><td>Vents ТТУН 100 / Mars Hydro iFresh 100</td><td>≈100–200 м³/ч, регулировка</td></tr>
+        <tr><td>Обогрев</td><td>REXANT 60-0060 / BALLUBFH S-03N</td><td>0,8–1,5 кВт, терморегуляция</td></tr>
+        <tr><td>Охлаждение</td><td>Peltier TEC1-12706 / мобильный кондиционер</td><td>60–200 Вт, по зоне</td></tr>
+        <tr><td>Увлажнение</td><td>Mars Hydro 6L / ANTICA RUH-AN300</td><td>ультразвуковой, по зоне</td></tr>
+        <tr><td>Пожаротушение</td><td>Спринклерный модуль / аэрозольный генератор</td><td>автоматический запуск</td></tr>
+        <tr><td>Инференс нейросети</td><td>Coral USB Accelerator / Jetson Nano + облако</td><td>CNN GreenhouseNet v1.2</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+</main>
+
+<div id="toasts"></div>
+<div class="overlay" id="overlay"><div class="modal" id="modal"></div></div>
+
+<script>
+/* =========================================================
+   0. УТИЛИТЫ
+   ========================================================= */
+const $  = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
+const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+const rnd = (a, b) => a + Math.random() * (b - a);
+const pad2 = n => String(n).padStart(2, '0');
+const hhmmss = d => pad2(d.getHours()) + ':' + pad2(d.getMinutes()) + ':' + pad2(d.getSeconds());
+const rub = n => n.toLocaleString('ru-RU');
+
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+function hashStr(s){let h=2166136261;for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619)}return h>>>0}
+function slowDrift(t, seed) {
+  return Math.sin(t * 0.005 + seed) * 0.6 + Math.sin(t * 0.0013 + seed * 2) * 0.4;
+}
+
+/* =========================================================
+   1. МОДЕЛЬ ДАННЫХ
+   ========================================================= */
+const ACT_LABEL = {
+  pump:'Полив', lamp:'Досветка', fan:'Вентиляция',
+  heater:'Обогрев', humid:'Увлажнение', vent:'Приток воздуха',
+  cooler:'Охлаждение'
+};
+const ACT_ICON = { pump:'💧', lamp:'💡', fan:'🌀', heater:'🔥', humid:'💨', vent:'🪟', cooler:'❄️' };
+
+const SENSORS = [
+  { key:'temp',  label:'Температура',       unit:'°C',    dec:1, range:[5,35],     badge:'SHT31' },
+  { key:'hum',   label:'Влажность воздуха', unit:'%',     dec:0, range:[0,100],    badge:'SHT31' },
+  { key:'soil',  label:'Влажность почвы',   unit:'%',     dec:0, range:[0,100],    badge:'SEN0602' },
+  { key:'light', label:'Освещённость',      unit:'лк',    dec:0, range:[0,15000],  badge:'BH1750' },
+  { key:'ph',    label:'pH почвы',          unit:'',      dec:1, range:[0,14],     badge:'SEM2252' },
+  { key:'ec',    label:'EC почвы',          unit:'µS/см', dec:0, range:[0,10000],  badge:'SEN0602' },
+  { key:'n',     label:'Азот (N)',          unit:'мг/кг', dec:0, range:[0,300],    badge:'SEM2252' },
+  { key:'p',     label:'Фосфор (P)',        unit:'мг/кг', dec:0, range:[0,300],    badge:'SEM2252' },
+  { key:'k',     label:'Калий (K)',         unit:'мг/кг', dec:0, range:[0,300],    badge:'SEM2252' },
+  { key:'co2',   label:'CO₂',               unit:'ppm',   dec:0, range:[300,2000], badge:'MH-Z19B' },
+  { key:'tvoc',  label:'TVOC',              unit:'ppb',   dec:0, range:[0,1000],   badge:'SGP30' }
+];
+const SENSOR_LABEL = Object.fromEntries(SENSORS.map(s => [s.key, s.label.toLowerCase()]));
+
+const state = {
+  role:'specialist', auto:true, zone:'A',
+  log:[], history:{A:[],B:[],C:[]},
+  lastDiag:null, modalPlant:null
+};
+
+const FIRE_SUPPRESS_TICKS = 6;
+
+function makeZone(id, title, desc, limits, values, baseLight) {
+  return {
+    id, title, desc, limits,
+    values:{ ...values },
+    act:{ pump:false, lamp:false, fan:false, heater:false, humid:false, vent:false, cooler:false },
+    actFault:{},
+    baseLight, pumpTimer:0, pumpCooldown:0, lampHold:0, lampCooldown:0,
+    fault:{}, faultInfo:{}, slowSeed: Math.random() * 1000,
+    status:{},
+    fire:{ burning:false, suppressed:false, timer:0 },
+    inspect:{ required:false, reasons:[] }
+  };
+}
+
+const ZONES = {
+  A: makeZone('A','Тёплый влажный блок','Орхидеи · притенение · RH 55–80 %',
+    { temp:[19,25], hum:[55,80], soil:[35,65], light:[2500,12000],
+      ph:[5.5,6.8], ec:[200,800], n:[40,120], p:[20,80], k:[30,100],
+      co2:[400,1200], tvoc:[0,400] },
+    { temp:18.4, hum:64, soil:52, light:2600, ph:6.1, ec:420, n:65, p:38, k:55, co2:620, tvoc:80 }, 2200),
+
+  B: makeZone('B','Умеренный лесной блок','Лесные виды · рассеянный свет',
+    { temp:[16,22], hum:[45,70], soil:[30,60], light:[3000,12000],
+      ph:[5.8,7.2], ec:[150,700], n:[30,100], p:[15,70], k:[25,90],
+      co2:[400,1200], tvoc:[0,400] },
+    { temp:19.2, hum:58, soil:47, light:5200, ph:6.5, ec:350, n:52, p:30, k:44, co2:580, tvoc:60 }, 5200),
+
+  C: makeZone('C','Сухой светлый блок','Степные виды · максимум света',
+    { temp:[20,27], hum:[30,50], soil:[22,45], light:[6000,15000],
+      ph:[6.5,8.0], ec:[100,500], n:[20,80], p:[10,50], k:[15,70],
+      co2:[400,1000], tvoc:[0,350] },
+    { temp:24.1, hum:41, soil:24, light:9800, ph:7.4, ec:220, n:34, p:18, k:28, co2:450, tvoc:40 }, 8000)
+};
+
+const PLANTS = [
+  {
+    id:'P-01', name:'Венерин башмачок настоящий', lat:'Cypripedium calceolus', zone:'A',
+    state:'ok', stateLabel:'норма', planted:'14.03.2025', photos:12, postFire:false, needsInspect:false,
+    cond:'t 20–24 °C · RH 60–75 % · рассеянный свет 3–8 клк · известняковая смесь с листовой землёй',
+    origin:'Договор с ботаническим садом, 2025 г. Изъятие из природы запрещено.',
+    refUrl:null, curUrl:null, disease:null,
+    diseases:[
+      { name:'Серая гниль (Botrytis cinerea)', type:'grey',  note:'риск при RH > 80 % и застое воздуха' },
+      { name:'Корневая гниль (Rhizoctonia spp.)', type:'wilt', note:'при переувлажнении субстрата' },
+      { name:'Мучнистая роса', type:'powdery', note:'при резких колебаниях температуры' },
+      { name:'Вредители: слизни, щитовки', type:'pests', note:'появление липкого налёта и погрызов' }
+    ],
+    history:[
+      { d:'02.04.2025', t:'Осмотр: 2 новых побега, признаков болезней и вредителей нет.' },
+      { d:'21.03.2025', t:'Посадка в зону A, подключён цифровой паспорт и датчики зоны.' }
+    ]
+  },
+  {
+    id:'P-02', name:'Венерин башмачок крупноцветковый', lat:'Cypripedium macranthos', zone:'A',
+    state:'watch', stateLabel:'наблюдение', planted:'14.03.2025', photos:9, postFire:false, needsInspect:false,
+    cond:'t 19–23 °C · RH 60–75 % · притенение 60 % · нейтральный субстрат',
+    origin:'Договор с ботаническим садом, 2025 г.',
+    refUrl:null, curUrl:null, disease:null,
+    diseases:[
+      { name:'Пятнистость листьев (Cercospora, Phyllosticta)', type:'spots', note:'тёмные пятна с каймой' },
+      { name:'Антракноз', type:'spots', note:'вдавленные пятна на листьях' },
+      { name:'Корневая гниль', type:'wilt', note:'при застойной влаге' },
+      { name:'Вредители: паутинный клещ, тля', type:'pests', note:'мелкая крапчатость, паутинка' }
+    ],
+    history:[
+      { d:'05.04.2025', t:'Предварительная оценка по фото: пожелтение края листа. Требуется проверка специалистом.' },
+      { d:'21.03.2025', t:'Посадка в зону A.' }
+    ]
+  },
+  {
+    id:'P-03', name:'Ятрышник шлемоносный', lat:'Orchis militaris', zone:'B',
+    state:'ok', stateLabel:'норма', planted:'18.03.2025', photos:7, postFire:false, needsInspect:false,
+    cond:'t 16–22 °C · RH 45–70 % · рассеянный свет 4–10 клк',
+    origin:'Питомник редких растений, 2025 г.',
+    refUrl:null, curUrl:null, disease:null,
+    diseases:[
+      { name:'Ржавчина (Puccinia sessilis)', type:'rust', note:'оранжевые пустулы на листьях' },
+      { name:'Белая гниль (Sclerotinia)', type:'grey', note:'при высокой влажности' },
+      { name:'Антракноз', type:'spots', note:'тёмные пятна' },
+      { name:'Вредители: слизни, тля', type:'pests', note:'погрызы, деформация побегов' }
+    ],
+    history:[{ d:'28.03.2025', t:'Осмотр: развитие по фенофазе соответствует норме.' }]
+  },
+  {
+    id:'P-04', name:'Любка двулистная', lat:'Platanthera bifolia', zone:'B',
+    state:'ok', stateLabel:'норма', planted:'18.03.2025', photos:6, postFire:false, needsInspect:false,
+    cond:'t 16–21 °C · RH 50–70 % · полутень',
+    origin:'Питомник редких растений, 2025 г.',
+    refUrl:null, curUrl:null, disease:null,
+    diseases:[
+      { name:'Ржавчина (Puccinia sessilis)', type:'rust', note:'поражение листьев' },
+      { name:'Пятнистость листьев грибковой природы', type:'spots', note:'бурые пятна' },
+      { name:'Корневая гниль', type:'wilt', note:'при переувлажнении' },
+      { name:'Вредители: слизни', type:'pests', note:'объедание листовых пластин' }
+    ],
+    history:[{ d:'28.03.2025', t:'Осмотр: без замечаний.' }]
+  },
+  {
+    id:'P-05', name:'Ковыль перистый', lat:'Stipa pennata', zone:'C',
+    state:'ok', stateLabel:'норма', planted:'20.03.2025', photos:5, postFire:false, needsInspect:false,
+    cond:'t 20–27 °C · RH 30–50 % · прямой свет 8–15 клк · песчано-известковый субстрат',
+    origin:'Семенной фонд ботанического сада, 2025 г.',
+    refUrl:null, curUrl:null, disease:null,
+    diseases:[
+      { name:'Пятнистость листьев (Ascochyta stipae-pennatae)', type:'spots', note:'мелкие бурые пятна' },
+      { name:'Корневые гнили', type:'wilt', note:'вид плохо переносит переувлажнение' },
+      { name:'Хлороз при защелачивании', type:'chlorosis', note:'при pH выше 8' }
+    ],
+    history:[{ d:'30.03.2025', t:'Осмотр: активное отрастание.' }]
+  },
+  {
+    id:'P-06', name:'Тюльпан Биберштейна', lat:'Tulipa biebersteiniana', zone:'C',
+    state:'rest', stateLabel:'период покоя', planted:'20.03.2025', photos:4, postFire:false, needsInspect:false,
+    cond:'в покое: t 18–22 °C · RH 30–45 % · полив ограничен',
+    origin:'Семенной фонд ботанического сада, 2025 г.',
+    refUrl:null, curUrl:null, disease:null,
+    diseases:[
+      { name:'Альтернариоз (Alternaria alternata)', type:'spots', note:'бурые пятна на листьях' },
+      { name:'Вирус пестролепестности (TBV)', type:'mosaic', note:'жёлто-зелёная мозаика' },
+      { name:'Фузариоз (Fusarium oxysporum)', type:'wilt', note:'при нарушении режима' },
+      { name:'Серая гниль', type:'grey', note:'при застое воздуха' }
+    ],
+    history:[{ d:'01.04.2025', t:'Переведён в режим покоя: полив снижен, досвечивание отключено.' }]
+  },
+  {
+    id:'P-07', name:'Адонис весенний', lat:'Adonis vernalis', zone:'C',
+    state:'ok', stateLabel:'норма', planted:'22.03.2025', photos:8, postFire:false, needsInspect:false,
+    cond:'t 20–26 °C · RH 30–50 % · максимум света',
+    origin:'Питомник редких растений, 2025 г.',
+    refUrl:null, curUrl:null, disease:null,
+    diseases:[
+      { name:'Головня (Urocystis anemones)', type:'spots', note:'тёмные вздутия на побегах' },
+      { name:'Мучнистая роса (Sphaerotheca fuliginea)', type:'powdery', note:'белый налёт' },
+      { name:'Корневые гнили', type:'wilt', note:'при избытке влаги' },
+      { name:'Вредители: жук-листоед Entomoscelis adonidis', type:'pests', note:'объедание листьев' }
+    ],
+    history:[{ d:'02.04.2025', t:'Осмотр: бутонизация, признаков стресса нет.' }]
+  }
+];
+
+/* =========================================================
+   2. ФОТОХРАНИЛИЩЕ
+   ========================================================= */
+const PHOTO_KEY = 'smartGreenhousePhotos_v1';
+let photoStore = {};
+try { photoStore = JSON.parse(localStorage.getItem(PHOTO_KEY) || '{}') || {}; } catch(e){ photoStore = {}; }
+
+function savePhotoStore() {
+  try { localStorage.setItem(PHOTO_KEY, JSON.stringify(photoStore)); }
+  catch(e) { toast('warn','Не сохранено','Хранилище браузера заполнено — уменьшите число фотографий.'); }
+}
+
+const imgCache = {};
+function getDrawable(url, onReady) {
+  if (!url) return null;
+  const rec = imgCache[url];
+  if (rec) return rec.ready ? rec.el : null;
+  const img = new Image();
+  const r = { ready:false, el:img };
+  imgCache[url] = r;
+  img.onload  = () => { r.ready = true; r.el = img; if (onReady) onReady(); };
+  img.onerror = () => { r.ready = false; };
+  img.src = url;
+  return null;
+}
+
+function photoUrlFor(plant, slot) {
+  const user = photoStore[plant.id] && photoStore[plant.id][slot];
+  if (user) return user;
+  return slot === 'ref' ? (plant.refUrl || null) : (plant.curUrl || null);
+}
+
+/* =========================================================
+   3. ПРОЦЕДУРНАЯ ОТРИСОВКА РАСТЕНИЯ
+   ========================================================= */
+function paintBlob(ctx, type, x, y, R, sev, rnd) {
+  const A = a => Math.min(1, Math.max(0, a));
+  if (type === 'chlorosis') {
+    const rad = R * (0.14 + rnd() * 0.20);
+    const g = ctx.createRadialGradient(x,y,0,x,y,rad);
+    g.addColorStop(0, 'rgba(216,206,88,' + A(0.6 + 0.4*sev) + ')');
+    g.addColorStop(1, 'rgba(216,206,88,0)');
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x,y,rad,0,Math.PI*2); ctx.fill(); return;
+  }
+  if (type === 'necrosis') {
+    const rad = R * (0.07 + rnd()*0.10);
+    ctx.fillStyle = 'rgba(126,80,42,' + A(0.7 + 0.3*sev) + ')';
+    ctx.beginPath(); ctx.arc(x,y,rad,0,Math.PI*2); ctx.fill();
+    ctx.strokeStyle = 'rgba(80,50,26,' + A(0.4+0.4*sev) + ')';
+    ctx.lineWidth = Math.max(1, R*0.03); ctx.stroke(); return;
+  }
+  if (type === 'spots') {
+    const rad = R * (0.04 + rnd()*0.07);
+    ctx.fillStyle = 'rgba(48,34,24,' + A(0.8 + 0.2*sev) + ')';
+    ctx.beginPath(); ctx.arc(x,y,rad,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle = 'rgba(180,150,90,' + A(0.3*sev) + ')';
+    ctx.beginPath(); ctx.arc(x+rad*0.25, y-rad*0.25, rad*0.55, 0, Math.PI*2); ctx.fill(); return;
+  }
+  if (type === 'rust') {
+    const rad = R * (0.018 + rnd()*0.028);
+    ctx.fillStyle = 'rgba(196,104,36,' + A(0.8+0.2*sev) + ')';
+    ctx.beginPath(); ctx.arc(x,y,rad,0,Math.PI*2); ctx.fill(); return;
+  }
+  if (type === 'powdery') {
+    const rad = R * (0.10 + rnd()*0.16);
+    const g = ctx.createRadialGradient(x,y,0,x,y,rad);
+    g.addColorStop(0, 'rgba(230,235,230,' + A(0.7 + 0.3*sev) + ')');
+    g.addColorStop(1, 'rgba(230,235,230,0)');
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x,y,rad,0,Math.PI*2); ctx.fill(); return;
+  }
+  if (type === 'mosaic') {
+    const rad = R * (0.10 + rnd()*0.14);
+    const col = rnd() > 0.35 ? '200,206,92' : '150,190,110';
+    const g = ctx.createRadialGradient(x,y,0,x,y,rad);
+    g.addColorStop(0, 'rgba(' + col + ',' + A(0.6 + 0.4*sev) + ')');
+    g.addColorStop(1, 'rgba(' + col + ',0)');
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x,y,rad,0,Math.PI*2); ctx.fill(); return;
+  }
+  if (type === 'pests') {
+    const rad = R * (0.03 + rnd()*0.05);
+    ctx.fillStyle = 'rgba(36,28,24,' + A(0.85 + 0.15*sev) + ')';
+    ctx.beginPath(); ctx.arc(x,y,rad,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle = 'rgba(214,206,110,' + A(0.4*sev) + ')';
+    ctx.beginPath(); ctx.arc(x,y,rad*2.5,0,Math.PI*2); ctx.fill();
+    return;
+  }
+  if (type === 'grey') {
+    const rad = R * (0.09 + rnd()*0.13);
+    const g = ctx.createRadialGradient(x,y,0,x,y,rad);
+    g.addColorStop(0, 'rgba(150,150,148,' + A(0.6 + 0.4*sev) + ')');
+    g.addColorStop(1, 'rgba(150,150,148,0)');
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x,y,rad,0,Math.PI*2); ctx.fill(); return;
+  }
+  if (type === 'wilt') {
+    const rad = R * (0.12 + rnd()*0.16);
+    const g = ctx.createRadialGradient(x,y,0,x,y,rad);
+    g.addColorStop(0, 'rgba(168,158,76,' + A(0.5 + 0.5*sev) + ')');
+    g.addColorStop(1, 'rgba(168,158,76,0)');
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x,y,rad,0,Math.PI*2); ctx.fill();
+  }
+}
+
+function drawPlantImage(canvas, opts) {
+  opts = opts || {};
+  const type   = opts.type || 'healthy';
+  const sev    = clamp(opts.severity == null ? 0 : opts.severity, 0, 1);
+  const seed   = opts.seed == null ? 1 : opts.seed;
+  const showPot = opts.showPot !== false;
+  const photo  = opts.photo || null;
+
+  const W = canvas.width, H = canvas.height;
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, W, H);
+
+  if (photo) {
+    const s = Math.max(W / photo.width, H / photo.height);
+    const dw = photo.width * s, dh = photo.height * s;
+    ctx.drawImage(photo, (W - dw) / 2, (H - dh) / 2, dw, dh);
+    return;
+  }
+
+  const rnd = mulberry32(seed);
+
+  const bg = ctx.createLinearGradient(0, 0, 0, H);
+  bg.addColorStop(0, '#f5f9f6');
+  bg.addColorStop(1, '#e5efe9');
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, W, H);
+
+  const cx = W / 2;
+  const cy = H * (showPot ? 0.45 : 0.50);
+  const R  = Math.min(W, H) * (showPot ? 0.32 : 0.36);
+
+  if (showPot) {
+    const pw = W * 0.30, ph = H * 0.15;
+    ctx.fillStyle = '#c98c5c';
+    ctx.beginPath();
+    ctx.moveTo(cx - pw / 2, H - ph);
+    ctx.lineTo(cx + pw / 2, H - ph);
+    ctx.lineTo(cx + pw * 0.38, H);
+    ctx.lineTo(cx - pw * 0.38, H);
+    ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#a86f45';
+    ctx.fillRect(cx - pw / 2, H - ph, pw, H * 0.022);
+  }
+
+  const leafCount = 5 + Math.floor(rnd() * 3);
+  const leaves = [];
+  const droop = (type === 'wilt') ? sev * R * 0.30 : 0;
+
+  for (let i = 0; i < leafCount; i++) {
+    const spread = (i - (leafCount - 1) / 2) / Math.max(1, (leafCount - 1) / 2);
+    const ang  = -Math.PI / 2 + spread * 1.15 + (rnd() - 0.5) * 0.22;
+    const len  = R * (0.85 + rnd() * 0.35);
+    const lx   = cx + Math.cos(ang) * len * 0.55;
+    const ly   = cy + Math.sin(ang) * len * 0.55 + droop * (0.4 + rnd() * 0.6);
+    leaves.push({
+      lx, ly,
+      rx:  len * 0.44,
+      ry:  len * 0.23 * (1 - droop / (R * 2.5)),
+      rot: ang
+    });
+  }
+
+  const leafPath = new Path2D();
+  leaves.forEach(l => {
+    const p = new Path2D();
+    p.ellipse(0, 0, l.rx, l.ry, 0, 0, Math.PI * 2);
+    const m = new DOMMatrix().translate(l.lx, l.ly).rotate(l.rot * 180 / Math.PI);
+    leafPath.addPath(p, m);
+  });
+
+  leaves.forEach(l => {
+    ctx.save();
+    ctx.translate(l.lx, l.ly);
+    ctx.rotate(l.rot);
+    const g = ctx.createLinearGradient(-l.rx, 0, l.rx, 0);
+    let c1 = '#6dbf7e', c2 = '#2e8549';
+    if (type === 'chlorosis' || type === 'mosaic') { c1 = '#9ac56a'; c2 = '#5f9c46'; }
+    if (type === 'wilt') { c1 = '#a9b96a'; c2 = '#6e8342'; }
+    if (type === 'powdery' || type === 'grey') { c1 = '#85b890'; c2 = '#4a9e62'; }
+    if (type === 'rust') { c1 = '#8cbf7a'; c2 = '#4a8c49'; }
+    if (type === 'pests') { c1 = '#78b875'; c2 = '#357a3a'; }
+    g.addColorStop(0, c1); g.addColorStop(1, c2);
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.ellipse(0, 0, l.rx, l.ry, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,.30)';
+    ctx.lineWidth = Math.max(1, W / 180);
+    ctx.beginPath(); ctx.moveTo(-l.rx * 0.75, 0); ctx.lineTo(l.rx * 0.75, 0); ctx.stroke();
+    ctx.restore();
+  });
+
+  if (type !== 'healthy' && sev > 0.01) {
+    ctx.save();
+    ctx.clip(leafPath);
+    const count = Math.round(12 + sev * 60);
+    for (let i = 0; i < count; i++) {
+      const a = rnd() * Math.PI * 2;
+      const r = Math.sqrt(rnd()) * R * 1.15;
+      const x = cx + Math.cos(a) * r;
+      const y = cy + Math.sin(a) * r * 0.95;
+      paintBlob(ctx, type, x, y, R, sev, rnd);
+    }
+    ctx.restore();
+  }
+}
+
+function paintPlant(canvas, plant, slot) {
+  const url = photoUrlFor(plant, slot);
+  const dr = getDrawable(url, () => {
+    drawPlantThumbs();
+    if (state.modalPlant === plant.id) refreshModalCanvases();
+  });
+
+  let type = 'healthy', sev = 0;
+  if (slot === 'cur' && plant.disease) {
+    type = plant.disease.type;
+    sev  = plant.disease.severity;
+  }
+  drawPlantImage(canvas, { type, severity: sev, seed: hashStr(plant.id), photo: dr });
+}
+
+/* =========================================================
+   4. ЖУРНАЛ И УВЕДОМЛЕНИЯ
+   ========================================================= */
+function log(level, text) {
+  state.log.unshift({ time: new Date(), level, text });
+  if (state.log.length > 200) state.log.pop();
+  renderLog();
+}
+function toast(level, title, text, ms) {
+  const box = $('#toasts');
+  if (box.children.length > 3) box.firstElementChild.remove();
+  const el = document.createElement('div');
+  el.className = 'toast ' + level;
+  el.innerHTML = '<div class="toast-title"></div><div class="toast-text"></div>';
+  el.querySelector('.toast-title').textContent = title;
+  el.querySelector('.toast-text').textContent = text;
+  box.appendChild(el);
+  setTimeout(() => { el.classList.add('out'); setTimeout(() => el.remove(), 380); }, ms || 7000);
+}
+function renderLog() {
+  $('#log').innerHTML = state.log.slice(0, 60).map(e =>
+    '<div class="log-row"><span class="log-tag ' + e.level + '"></span>' +
+    '<span class="log-time">' + hhmmss(e.time) + '</span>' +
+    '<span>' + e.text + '</span></div>'
+  ).join('');
+}
+
+/* =========================================================
+   5. ОСМОТР СПЕЦИАЛИСТА
+   ========================================================= */
+function addInspection(zoneId, reason) {
+  const z = ZONES[zoneId];
+  if (!z) return;
+  if (!z.inspect.reasons.includes(reason)) {
+    z.inspect.reasons.push(reason);
+    z.inspect.required = true;
+    log('warn', 'Зона ' + zoneId + ': требуется осмотр специалиста — ' + reason);
+    toast('warn', 'Требуется осмотр', 'Зона ' + zoneId + ': ' + reason);
+  }
+  renderZones();
+}
+
+function removeInspection(zoneId, reason) {
+  const z = ZONES[zoneId];
+  if (!z) return;
+  z.inspect.reasons = z.inspect.reasons.filter(r => r !== reason);
+  z.inspect.required = z.inspect.reasons.length > 0;
+  renderZones();
+}
+
+function completeInspection(zoneId) {
+  if (state.role !== 'specialist') {
+    toast('info', 'Недоступно', 'Осмотр может подтвердить только специалист.');
+    return;
+  }
+  const z = ZONES[zoneId];
+  z.inspect.reasons = [];
+  PLANTS.forEach(p => {
+    if (p.zone !== zoneId) return;
+    if (p.disease) {
+      z.inspect.reasons.push('заболевание ' + p.id + ': ' + p.disease.name);
+      p.needsInspect = true;
+    } else if (!p.postFire) {
+      p.needsInspect = false;
+    }
+  });
+  if (z.fire.suppressed) z.inspect.reasons.push('пожар: требуется осмотр после тушения');
+  z.inspect.required = z.inspect.reasons.length > 0;
+
+  log('ok', 'Зона ' + zoneId + ': специалист провёл осмотр.');
+  toast('ok', 'Осмотр проведён',
+    'Зона ' + zoneId + ': подозрения нейросети сняты.' +
+    (z.inspect.required ? ' Остаются причины: ' + z.inspect.reasons.length : ' Замечаний нет.'));
+  renderZones();
+  renderPlantsListOnly();
+}
+
+/* =========================================================
+   6. МОДЕЛЬ СРЕДЫ + БОЛЕЗНИ + ОТКАЗЫ + ПОЖАР
+   ========================================================= */
+let zonePressure = { A:0, B:0, C:0 };
+let zoneFungal   = { A:0, B:0, C:0 };
+
+function computeDiseasePressure() {
+  zonePressure = { A:0, B:0, C:0 };
+  zoneFungal   = { A:0, B:0, C:0 };
+  PLANTS.forEach(p => {
+    if (!p.disease) return;
+    zonePressure[p.zone] += p.disease.severity;
+    if (p.disease.type === 'grey' || p.disease.type === 'powdery') {
+      zoneFungal[p.zone] += p.disease.severity;
+    }
+  });
+}
+
+function simZone(z) {
+  const v = z.values, a = z.act;
+  const t = tickCount;
+  const seed = z.slowSeed;
+
+  // ---- FIRE ----
+  if (z.fire.burning) {
+    v.temp = Math.min(60, v.temp + 2.0 + Math.random() * 1.0);
+    v.hum = Math.max(5, v.hum - 3);
+    v.tvoc = Math.min(1000, v.tvoc + 80);
+    v.co2 = Math.min(3000, v.co2 + 50);
+    for (const k in a) a[k] = false;
+    return;
+  }
+  if (z.fire.suppressed) {
+    v.temp = Math.max(22, v.temp - 1.5);
+    v.hum = Math.min(60, v.hum + 1);
+    v.tvoc = Math.max(80, v.tvoc - 20);
+    v.co2 = Math.max(500, v.co2 - 20);
+    for (const k in a) a[k] = false;
+    return;
+  }
+
+  const fault = key => z.fault[key];
+  const isDrift = key => z.fault[key] === 'drift';
+
+  // TEMPERATURE
+  if (!fault('temp') || isDrift('temp')) {
+    const drift = slowDrift(t, seed) * 2.0;
+    let target = (a.heater ? 26.5 : 18.6) + drift;
+    if (a.cooler) target -= 8.0;
+    v.temp += (target - v.temp) * 0.022 + rnd(-0.05, 0.05);
+    v.temp = clamp(v.temp, 5, 40);
+    if (isDrift('temp')) {
+      const info = z.faultInfo.temp;
+      info.offset = (info.offset || 0) + 0.002;
+      v.temp = clamp(v.temp + info.offset, 5, 45);
+    }
+  }
+
+  // HUMIDITY
+  if (!fault('hum') || isDrift('hum')) {
+    const drift = slowDrift(t + 100, seed) * 5.0;
+    let target = 52 + drift;
+    let dH = (target - v.hum) * 0.006;
+    if (a.pump)   dH += 0.55;
+    if (a.fan)    dH -= 0.40;
+    if (a.heater) dH -= 0.14;
+    if (a.humid)  dH += 0.60;
+    dH += (zoneFungal[z.id] || 0) * 0.12;
+    v.hum = clamp(v.hum + dH + rnd(-0.18, 0.18), 10, 98);
+    if (isDrift('hum')) {
+      const info = z.faultInfo.hum;
+      info.offset = (info.offset || 0) + 0.01;
+      v.hum = clamp(v.hum + info.offset, 5, 100);
+    }
+  }
+
+  // SOIL
+  if (!fault('soil') || isDrift('soil')) {
+    const drift = slowDrift(t + 200, seed) * 0.02;
+    let dS = -0.12 + drift;
+    if (a.pump) dS += 0.85;
+    v.soil = clamp(v.soil + dS + rnd(-0.04, 0.04), 4, 96);
+    if (isDrift('soil')) {
+      const info = z.faultInfo.soil;
+      info.offset = (info.offset || 0) + 0.005;
+      v.soil = clamp(v.soil + info.offset, 0, 100);
+    }
+  }
+
+  // LIGHT
+  if (!fault('light') || isDrift('light')) {
+    const drift = slowDrift(t + 300, seed) * 0.2;
+    const base = z.baseLight * (1 + drift);
+    v.light = Math.round((a.lamp ? base + 5000 : base * 0.65) + rnd(-50, 50));
+    if (isDrift('light')) {
+      const info = z.faultInfo.light;
+      info.offset = (info.offset || 0) + 2;
+      v.light = Math.max(0, v.light + info.offset);
+    }
+  }
+
+  // PH
+  if (!fault('ph') || isDrift('ph')) {
+    const drift = slowDrift(t + 400, seed) * 0.3;
+    v.ph += (6.3 + drift - v.ph) * 0.0008 + (a.pump ? -0.002 : 0) + rnd(-0.002, 0.002);
+    v.ph = clamp(v.ph, 4.5, 8.5);
+    if (isDrift('ph')) {
+      const info = z.faultInfo.ph;
+      info.offset = (info.offset || 0) + 0.0005;
+      v.ph = clamp(v.ph + info.offset, 3, 10);
+    }
+  }
+
+  // EC
+  if (!fault('ec') || isDrift('ec')) {
+    const drift = slowDrift(t + 500, seed) * 50;
+    v.ec += (350 + drift - v.ec) * 0.0012 + (a.pump ? -0.6 : 0) + rnd(-0.8, 0.8);
+    v.ec = clamp(v.ec, 50, 2000);
+    if (isDrift('ec')) {
+      const info = z.faultInfo.ec;
+      info.offset = (info.offset || 0) + 0.1;
+      v.ec = clamp(v.ec + info.offset, 0, 3000);
+    }
+  }
+
+  // NPK
+  ['n','p','k'].forEach((k, idx) => {
+    if (!fault(k) || isDrift(k)) {
+      const drift = slowDrift(t + 600 + idx*10, seed) * 10;
+      const target = z.limits[k][0] + 30 + drift;
+      v[k] += (target - v[k]) * 0.0009 + (a.pump ? -0.04 : 0) + rnd(-0.06, 0.06);
+      v[k] = clamp(v[k], 0, 300);
+      if (isDrift(k)) {
+        const info = z.faultInfo[k];
+        info.offset = (info.offset || 0) + 0.01;
+        v[k] = clamp(v[k] + info.offset, 0, 400);
+      }
+    }
+  });
+
+  // CO2
+  if (!fault('co2') || isDrift('co2')) {
+    const drift = slowDrift(t + 700, seed) * 50;
+    v.co2 += (520 + drift - v.co2) * 0.004 + (a.vent ? -6 : 0) + (a.fan ? -2 : 0) + rnd(-4, 4);
+    v.co2 = clamp(v.co2, 350, 2500);
+    if (isDrift('co2')) {
+      const info = z.faultInfo.co2;
+      info.offset = (info.offset || 0) + 0.1;
+      v.co2 = clamp(v.co2 + info.offset, 300, 3000);
+    }
+  }
+
+  // TVOC
+  if (!fault('tvoc') || isDrift('tvoc')) {
+    const drift = slowDrift(t + 800, seed) * 20;
+    v.tvoc += (60 + drift - v.tvoc) * 0.003 + (a.vent ? -1.5 : 0) + rnd(-1.2, 1.2);
+    v.tvoc += (zonePressure[z.id] || 0) * 1.2;
+    v.tvoc = clamp(v.tvoc, 0, 800);
+    if (isDrift('tvoc')) {
+      const info = z.faultInfo.tvoc;
+      info.offset = (info.offset || 0) + 0.02;
+      v.tvoc = clamp(v.tvoc + info.offset, 0, 1000);
+    }
+  }
+}
+
+/* =========================================================
+   7. АВТОУПРАВЛЕНИЕ
+   ========================================================= */
+function enforceActuatorFaults(z) {
+  for (const k in z.act) {
+    if (z.actFault[k] === 'off') z.act[k] = false;
+    if (z.actFault[k] === 'on')  z.act[k] = true;
+  }
+}
+
+function autoControl() {
+  if (!state.auto) return;
+  for (const z of Object.values(ZONES)) {
+    const v = z.values, a = z.act, L = z.limits;
+    const valid = key => !z.fault[key];
+
+    if (z.fire.burning || z.fire.suppressed) {
+      for (const k in a) a[k] = false;
+      continue;
+    }
+
+    // PUMP
+    if (!valid('soil')) {
+      a.pump = false;
+      z.pumpTimer = 0;
+      z.pumpCooldown = 0;
+    } else {
+      if (a.pump) {
+        if (z.pumpTimer > 0) z.pumpTimer--;
+        else { a.pump = false; z.pumpCooldown = 30; }
+        if (v.soil > L.soil[1]) { a.pump = false; z.pumpTimer = 0; z.pumpCooldown = 30; }
+      } else {
+        if (z.pumpCooldown > 0) z.pumpCooldown--;
+        if (v.soil < L.soil[0] && z.pumpCooldown === 0) {
+          a.pump = true; z.pumpTimer = 8; z.pumpCooldown = 0;
+        }
+      }
+    }
+
+    // LAMP
+    if (!valid('light')) {
+      a.lamp = false; z.lampHold = 0; z.lampCooldown = 0;
+    } else {
+      if (a.lamp) {
+        if (z.lampHold > 0) z.lampHold--;
+        else if (v.light > L.light[0] + 1500) { a.lamp = false; z.lampCooldown = 20; }
+      } else {
+        if (z.lampCooldown > 0) z.lampCooldown--;
+        if (v.light < L.light[0] && z.lampCooldown === 0) {
+          a.lamp = true; z.lampHold = 30; z.lampCooldown = 0;
+        }
+      }
+    }
+
+    // FAN
+    const humValid = valid('hum'), tvocValid = valid('tvoc');
+    if (!humValid && !tvocValid) {
+      a.fan = false;
+    } else {
+      const humHigh = humValid && v.hum > L.hum[1];
+      const tvocHigh = tvocValid && v.tvoc > L.tvoc[1];
+      const humLow = humValid && v.hum < L.hum[1] - 5;
+      const tvocLow = tvocValid && v.tvoc < L.tvoc[1] - 50;
+      if (a.fan) {
+        if (humLow && tvocLow) a.fan = false;
+      } else {
+        if (humHigh || tvocHigh) a.fan = true;
+      }
+    }
+
+    // HEATER
+    if (!valid('temp')) {
+      a.heater = false;
+    } else {
+      if (a.heater) { if (v.temp > L.temp[0] + 2.5) a.heater = false; }
+      else { if (v.temp < L.temp[0]) a.heater = true; }
+    }
+
+    // COOLER
+    if (!valid('temp')) {
+      a.cooler = false;
+    } else {
+      if (a.cooler) { if (v.temp < L.temp[1] - 1) a.cooler = false; }
+      else { if (v.temp > L.temp[1]) a.cooler = true; }
+    }
+    if (a.heater && a.cooler) {
+      if (v.temp < L.temp[0] + 2) a.cooler = false;
+      else a.heater = false;
+    }
+
+    // HUMIDIFIER
+    if (!valid('hum')) {
+      a.humid = false;
+    } else {
+      if (a.humid) { if (v.hum > L.hum[0] + 5) a.humid = false; }
+      else { if (v.hum < L.hum[0]) a.humid = true; }
+    }
+
+    // VENT
+    if (!valid('co2')) {
+      a.vent = false;
+    } else {
+      if (a.vent) { if (v.co2 < L.co2[1] - 150) a.vent = false; }
+      else { if (v.co2 > L.co2[1]) a.vent = true; }
+    }
+
+    enforceActuatorFaults(z);
+  }
+}
+
+/* =========================================================
+   8. КОНТРОЛЬ ГРАНИЦ
+   ========================================================= */
+function statusOf(z, key) {
+  if (z.fault[key]) return 'fault';
+  const lo = z.limits[key][0], hi = z.limits[key][1];
+  const v = z.values[key];
+  if (v < lo) return 'low';
+  if (v > hi) return 'high';
+  return 'ok';
+}
+
+function checkLimits() {
+  for (const z of Object.values(ZONES)) {
+    for (const s of SENSORS) {
+      const key = s.key;
+      const st = statusOf(z, key);
+      if (st === (z.status[key] || 'ok')) continue;
+      z.status[key] = st;
+
+      const lo = z.limits[key][0], hi = z.limits[key][1];
+      const v = z.values[key];
+      const shown = s.dec ? v.toFixed(s.dec) : Math.round(v);
+
+      if (st === 'ok') {
+        log('ok', 'Зона ' + z.id + ': ' + s.label.toLowerCase() + ' вернулась в норму (' + shown + ' ' + s.unit + ')');
+      } else if (st === 'fault') {
+        log('bad', 'Зона ' + z.id + ': нет достоверных данных о параметре «' + s.label.toLowerCase() + '»');
+      } else {
+        const dir = st === 'low' ? 'ниже' : 'выше';
+        const lim = st === 'low' ? lo : hi;
+        log('warn', 'Зона ' + z.id + ': ' + s.label.toLowerCase() + ' ' + shown + ' ' + s.unit +
+                    ' — ' + dir + ' нормы (' + lim + ' ' + s.unit + ')');
+      }
+    }
+  }
+}
+
+/* =========================================================
+   9. ЗОНЫ: ОТРИСОВКА
+   ========================================================= */
+function buildZones() {
+  const wrap = $('#zones');
+  wrap.innerHTML = '';
+  for (const z of Object.values(ZONES)) {
+    const card = document.createElement('div');
+    card.className = 'card zone';
+
+    const head = document.createElement('div');
+    head.className = 'zone-head';
+    head.innerHTML =
+      '<div><h3>Зона ' + z.id + ' · ' + z.title + '</h3><p>' + z.desc + '</p></div>' +
+      '<span class="chip" data-chip>—</span>';
+    card.appendChild(head);
+
+    const inspectBar = document.createElement('div');
+    inspectBar.className = 'inspect-bar hidden';
+    card.appendChild(inspectBar);
+
+    const sensors = document.createElement('div');
+    sensors.className = 'sensors';
+    z.ui = { sensors:{}, card, inspectBar };
+
+    SENSORS.forEach(s => {
+      const el = document.createElement('div');
+      el.className = 'sensor';
+      el.innerHTML =
+        '<div class="sensor-top"><span>' + s.label + '</span><span class="dotmini"></span></div>' +
+        '<div class="sensor-val"><b>—</b><span>' + s.unit + '</span></div>' +
+        '<div class="bar"><i></i></div>' +
+        '<div class="sensor-range">норма ' + z.limits[s.key][0] + '–' + z.limits[s.key][1] + ' ' + s.unit + '</div>' +
+        '<div class="sensor-badge">' + s.badge + '</div>';
+      sensors.appendChild(el);
+      z.ui.sensors[s.key] = {
+        val: el.querySelector('b'),
+        bar: el.querySelector('.bar i'),
+        dot: el.querySelector('.dotmini')
+      };
+    });
+    card.appendChild(sensors);
+
+    const acts = document.createElement('div');
+    acts.className = 'act-row';
+    z.ui.acts = {};
+    Object.keys(ACT_LABEL).forEach(key => {
+      const b = document.createElement('button');
+      b.className = 'act';
+      b.innerHTML = '<span class="ico">' + ACT_ICON[key] + '</span>' +
+                    '<span class="nm">' + ACT_LABEL[key] + '</span>' +
+                    '<span class="st">выкл</span>';
+      b.addEventListener('click', () => toggleAct(z.id, key));
+      acts.appendChild(b);
+      z.ui.acts[key] = b;
+    });
+    card.appendChild(acts);
+
+    z.ui.chip = head.querySelector('[data-chip]');
+    wrap.appendChild(card);
+  }
+}
+
+function toggleAct(zid, key) {
+  if (state.role !== 'specialist') { toast('info','Недоступно','Управление доступно только специалисту.'); return; }
+  if (state.auto) { toast('info','Автоматический режим','Переключите в ручной режим.'); return; }
+  const z = ZONES[zid];
+  if (z.fire.burning || z.fire.suppressed) { toast('warn','Авария','Зона в аварийном состоянии, управление заблокировано.'); return; }
+  if (z.actFault[key]) {
+    toast('warn','Отказ оборудования', ACT_LABEL[key] + ' неисправен (' + (z.actFault[key] === 'off' ? 'не включается' : 'не выключается') + '). Управление заблокировано.');
+    return;
+  }
+  z.act[key] = !z.act[key];
+  log('info', 'Зона ' + zid + ': ' + ACT_LABEL[key] + ' ' + (z.act[key] ? 'включён' : 'выключен') + ' (ручной режим)');
+  renderZones();
+}
+
+function renderZones() {
+  let alerts = 0;
+  for (const z of Object.values(ZONES)) {
+    SENSORS.forEach(s => {
+      const ui = z.ui.sensors[s.key];
+      const st = statusOf(z, s.key);
+      const isFault = st === 'fault';
+      ui.val.textContent = isFault ? '—' : (s.dec ? z.values[s.key].toFixed(s.dec) : Math.round(z.values[s.key]));
+
+      const pct = isFault ? 0 : clamp((z.values[s.key] - s.range[0]) / (s.range[1] - s.range[0]) * 100, 0, 100);
+      ui.bar.style.width = pct + '%';
+      ui.bar.className = st === 'ok' ? '' : (isFault ? 'fault' : 'warn');
+      ui.dot.className = 'dotmini ' + (st === 'ok' ? '' : 'bad');
+
+      if (st !== 'ok') alerts++;
+    });
+
+    const hasFault = SENSORS.some(s => statusOf(z, s.key) === 'fault');
+    const hasWarn  = SENSORS.some(s => { const st = statusOf(z, s.key); return st === 'low' || st === 'high'; });
+    const chip = z.ui.chip;
+
+    if (z.fire.burning) {
+      chip.textContent = '🔥 ПОЖАР';
+      chip.className = 'chip fire';
+      z.ui.card.style.borderColor = '#c62828';
+      z.ui.card.style.background = '#fff5f5';
+    } else if (z.fire.suppressed) {
+      chip.textContent = 'осмотр после пожара';
+      chip.className = 'chip bad';
+      z.ui.card.style.borderColor = '#e8a13a';
+      z.ui.card.style.background = '#fffaf2';
+    } else if (z.inspect.required) {
+      chip.textContent = 'требует осмотра';
+      chip.className = 'chip inspect';
+      z.ui.card.style.borderColor = '';
+      z.ui.card.style.background = '';
+    } else if (hasFault) {
+      chip.textContent = 'нет данных';
+      chip.className = 'chip fault';
+      z.ui.card.style.borderColor = '';
+      z.ui.card.style.background = '';
+    } else if (hasWarn) {
+      chip.textContent = 'отклонение';
+      chip.className = 'chip warn';
+      z.ui.card.style.borderColor = '';
+      z.ui.card.style.background = '';
+    } else {
+      chip.textContent = 'норма';
+      chip.className = 'chip';
+      z.ui.card.style.borderColor = '';
+      z.ui.card.style.background = '';
+    }
+
+    // inspection bar
+    const ib = z.ui.inspectBar;
+    if (z.inspect.required) {
+      ib.classList.remove('hidden');
+      ib.innerHTML = '<b>⚠️ Требуется осмотр:</b>' +
+        z.inspect.reasons.map(r => '<span class="reason">' + r + '</span>').join('') +
+        (state.role === 'specialist' ? '<button class="btn sm" data-complete-inspect="' + z.id + '">Провёл осмотр</button>' : '');
+    } else {
+      ib.classList.add('hidden');
+      ib.innerHTML = '';
+    }
+
+    Object.keys(ACT_LABEL).forEach(key => {
+      const b = z.ui.acts[key];
+      b.classList.toggle('on', z.act[key]);
+      if (z.actFault[key]) {
+        b.classList.add('faulty');
+        b.querySelector('.st').textContent = z.actFault[key] === 'off' ? 'отказ 0' : 'отказ 1';
+      } else {
+        b.classList.remove('faulty');
+        b.querySelector('.st').textContent = z.act[key] ? 'вкл' : 'выкл';
+      }
+      b.disabled = state.role !== 'specialist' || state.auto || z.fire.burning || z.fire.suppressed;
+    });
+  }
+  $('#kpiAlerts').textContent = alerts;
+  $('#kpiTime').textContent = hhmmss(new Date());
+}
+
+/* =========================================================
+   10. ГРАФИК
+   ========================================================= */
+const MAX_POINTS = 90;
+function drawChart() {
+  const c = $('#chart');
+  const dpr = window.devicePixelRatio || 1;
+  const w = c.clientWidth || 600, h = c.clientHeight || 240;
+  if (c.width !== Math.round(w*dpr) || c.height !== Math.round(h*dpr)) {
+    c.width = Math.round(w*dpr); c.height = Math.round(h*dpr);
+  }
+  const ctx = c.getContext('2d');
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  ctx.clearRect(0,0,w,h);
+
+  const padL=42, padR=42, padT=12, padB=24;
+  const iw = w-padL-padR, ih = h-padT-padB;
+
+  ctx.strokeStyle='#e9f1ec'; ctx.lineWidth=1;
+  ctx.font='11px system-ui, sans-serif';
+  for (let i=0;i<=4;i++){
+    const y = padT + ih*i/4;
+    ctx.beginPath(); ctx.moveTo(padL,y); ctx.lineTo(padL+iw,y); ctx.stroke();
+    ctx.fillStyle='#b6c6bd'; ctx.textAlign='right';
+    ctx.fillText((32-(22*i/4)).toFixed(0), padL-7, y+4);
+    ctx.textAlign='left';
+    ctx.fillText((100-25*i)+'', padL+iw+7, y+4);
+  }
+
+  const hist = state.history[state.zone] || [];
+  if (hist.length < 2) return;
+
+  const xAt = i => padL + iw * (i/(MAX_POINTS-1));
+  const yT   = v => padT + ih * (1-(clamp(v,10,32)-10)/22);
+  const yH   = v => padT + ih * (1-clamp(v,0,100)/100);
+  const yCO2 = v => padT + ih * (1-clamp(v/10,0,100)/100);
+
+  const series = (arr, yFn, color) => {
+    ctx.strokeStyle=color; ctx.lineWidth=2; ctx.lineJoin='round';
+    ctx.beginPath();
+    arr.forEach((v,i)=>{ const x=xAt(i), y=yFn(v); i?ctx.lineTo(x,y):ctx.moveTo(x,y); });
+    ctx.stroke();
+    const i = arr.length-1;
+    ctx.fillStyle=color;
+    ctx.beginPath(); ctx.arc(xAt(i), yFn(arr[i]), 3.2, 0, Math.PI*2); ctx.fill();
+  };
+
+  series(hist.map(p=>p.co2),  yCO2, '#8e6fd8');
+  series(hist.map(p=>p.hum),  yH,   '#3b7ddd');
+  series(hist.map(p=>p.soil), yH,   '#1a9e8f');
+  series(hist.map(p=>p.temp), yT,   '#e0663a');
+}
+
+/* =========================================================
+   11. ВИДЕОНАБЛЮДЕНИЕ
+   ========================================================= */
+function drawCameras() {
+  $$('canvas[data-cam]').forEach(cv => {
+    const zid = cv.dataset.cam;
+    const z = ZONES[zid];
+    const ctx = cv.getContext('2d');
+    const W = cv.width, H = cv.height;
+
+    const g = ctx.createRadialGradient(W/2, H/2, 30, W/2, H/2, W*0.85);
+    g.addColorStop(0, '#16241c');
+    g.addColorStop(1, '#070c09');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, W, H);
+
+    const rnd = mulberry32(tickCount * 7919 + hashStr(zid));
+    for (let i = 0; i < 120; i++) {
+      const x = rnd() * W, y = rnd() * H;
+      ctx.fillStyle = 'rgba(180,210,190,' + (0.03 + rnd() * 0.05) + ')';
+      ctx.fillRect(x, y, 1, 1);
+    }
+
+    ctx.strokeStyle = 'rgba(255,255,255,0.025)';
+    ctx.lineWidth = 1;
+    for (let y = 0; y < H; y += 3) {
+      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
+    }
+
+    ctx.textAlign = 'center';
+    ctx.fillStyle = 'rgba(200,220,205,0.55)';
+    ctx.font = '600 16px system-ui, sans-serif';
+    ctx.fillText('Нет видеосигнала', W/2, H/2 - 4);
+    ctx.font = '12px monospace';
+    ctx.fillStyle = 'rgba(160,185,165,0.5)';
+    ctx.fillText('камера ' + zid + ' · пусто', W/2, H/2 + 18);
+
+    const blink = (Math.floor(Date.now() / 600) % 2) === 0;
+    if (blink) {
+      ctx.fillStyle = '#e53935';
+      ctx.beginPath(); ctx.arc(16, 18, 4.5, 0, Math.PI*2); ctx.fill();
+    }
+    ctx.fillStyle = '#cfd8d2';
+    ctx.font = '11px monospace';
+    ctx.textAlign = 'left';
+    ctx.fillText('REC', 27, 22);
+
+    const now = new Date();
+    const ts = now.toLocaleDateString('ru-RU') + ' ' + hhmmss(now);
+    ctx.fillStyle = 'rgba(207,216,210,0.8)';
+    ctx.font = '11px monospace';
+    ctx.fillText(ts, 10, H - 10);
+
+    ctx.textAlign = 'right';
+    ctx.fillText('CAM-' + zid, W - 10, H - 10);
+
+    if (z.fire.burning) {
+      ctx.strokeStyle = 'rgba(229,57,53,0.85)';
+      ctx.lineWidth = 4;
+      ctx.strokeRect(2, 2, W-4, H-4);
+    } else if (z.fire.suppressed) {
+      ctx.strokeStyle = 'rgba(232,161,58,0.75)';
+      ctx.lineWidth = 3;
+      ctx.strokeRect(1.5, 1.5, W-3, H-3);
+    }
+  });
+}
+
+/* =========================================================
+   12. ГЛАВНЫЙ ЦИКЛ
+   ========================================================= */
+let tickCount = 0;
+
+function tick() {
+  tickCount++;
+
+  PLANTS.forEach(p => {
+    if (p.disease) p.disease.severity = Math.min(0.95, p.disease.severity + 0.004);
+  });
+
+  computeDiseasePressure();
+
+  // Fire timers per zone
+  for (const z of Object.values(ZONES)) {
+    if (z.fire.burning) {
+      z.fire.timer++;
+      if (z.fire.timer >= FIRE_SUPPRESS_TICKS) {
+        z.fire.burning = false;
+        z.fire.suppressed = true;
+        addInspection(z.id, 'пожар: требуется осмотр после тушения');
+        PLANTS.forEach(p => {
+          if (p.zone !== z.id) return;
+          p.postFire = true;
+          p.needsInspect = true;
+          if (!p.disease && Math.random() < 0.6) {
+            p.state = 'watch';
+            p.stateLabel = 'осмотр после пожара';
+          }
+        });
+        log('warn', 'Пожар в зоне ' + z.id + ' потушен автоматической системой пожаротушения. Требуется осмотр специалиста.');
+        toast('warn', 'Пожар потушен', 'Зона ' + z.id + ': система пожаротушения ликвидировала очаг. Требуется осмотр специалиста.');
+        updateFireUI();
+        renderPlantsListOnly();
+      }
+    }
+  }
+
+  for (const z of Object.values(ZONES)) {
+    simZone(z);
+  }
+
+  autoControl();
+  checkLimits();
+
+  for (const z of Object.values(ZONES)) {
+    const h = state.history[z.id];
+    h.push({ temp:z.values.temp, hum:z.values.hum, soil:z.values.soil, co2:z.values.co2 });
+    if (h.length > MAX_POINTS) h.shift();
+  }
+
+  renderZones();
+  drawChart();
+  drawCameras();
+
+  if (tickCount % 4 === 0) {
+    drawPlantThumbs();
+    renderSimActive();
+    if (state.modalPlant) refreshModalDynamic();
+  }
+}
+
+/* =========================================================
+   13. РАСТЕНИЯ
+   ========================================================= */
+function stateClass(p) {
+  if (p.disease) return 'sick';
+  if (p.postFire) return 'postfire';
+  if (p.needsInspect) return 'inspect';
+  if (p.state === 'watch') return 'watch';
+  if (p.state === 'rest')  return 'rest';
+  return '';
+}
+function stateTag(p) {
+  if (p.disease) return { cls:'sick', label:'болезнь' };
+  if (p.postFire) return { cls:'fire', label:'после пожара' };
+  if (p.needsInspect) return { cls:'inspect', label:'осмотр' };
+  if (p.state === 'watch') return { cls:'watch', label:'наблюдение' };
+  if (p.state === 'rest')  return { cls:'rest',  label:'период покоя' };
+  return { cls:'ok', label:'норма' };
+}
+
+function renderPlants() {
+  const wrap = $('#plants');
+  wrap.innerHTML = PLANTS.map(p => {
+    const tag = stateTag(p);
+    return '<div class="card plant ' + stateClass(p) + '" data-plant="' + p.id + '">' +
+      '<div class="plant-row">' +
+        '<canvas class="thumb" width="150" height="150" data-thumb="' + p.id + '"></canvas>' +
+        '<div style="min-width:0">' +
+          '<h4>' + p.name + '</h4>' +
+          '<div class="lat">' + p.lat + '</div>' +
+          '<div class="meta">' +
+            '<span class="tag">Зона ' + p.zone + '</span>' +
+            '<span class="tag ' + tag.cls + '">' + tag.label + '</span>' +
+            '<span class="tag">📷 ' + p.photos + '</span>' +
+          '</div>' +
+        '</div>' +
+      '</div>' +
+    '</div>';
+  }).join('');
+
+  $$('[data-plant]').forEach(el => el.addEventListener('click', () => openPassport(el.dataset.plant)));
+  drawPlantThumbs();
+}
+
+function drawPlantThumbs() {
+  $$('canvas[data-thumb]').forEach(cv => {
+    const p = PLANTS.find(x => x.id === cv.dataset.thumb);
+    if (p) paintPlant(cv, p, 'cur');
+  });
+}
+
+/* =========================================================
+   14. ПАСПОРТ РАСТЕНИЯ
+   ========================================================= */
+function openPassport(id) {
+  const p = PLANTS.find(x => x.id === id);
+  if (!p) return;
+  state.modalPlant = id;
+  const z = ZONES[p.zone];
+
+  const m = $('#modal');
+  m.innerHTML =
+    '<button class="close" id="modalClose">✕</button>' +
+    '<h3>' + p.name + '</h3>' +
+    '<p class="muted small" style="font-style:italic; margin-bottom:8px">' + p.lat + ' · паспорт ' + p.id + '</p>' +
+
+    (p.postFire
+      ? '<div class="banner" style="background:#fff0f0; border-color:#f2cccc; color:#a92c2c;">⚠️ Зона пострадала от пожара. Требуется осмотр специалистом.</div>'
+      : (p.needsInspect
+        ? '<div class="banner" style="background:#e7f0fb; border-color:#c9dcf3; color:#2f5fa8;">⚠️ Зафиксировано подозрение (нейросеть/болезнь). Требуется осмотр специалистом.</div>'
+        : '')) +
+
+    '<div class="photo-grid">' +
+      '<div class="slot">' +
+        '<div class="slot-head"><b>Эталон · как должно выглядеть</b></div>' +
+        '<canvas class="slot-canvas" width="300" height="300" data-canvas="ref"></canvas>' +
+        '<div class="slot-actions">' +
+          '<button class="btn sm" data-up="ref">Загрузить фото</button>' +
+          '<button class="btn sm" data-clear="ref">Сбросить</button>' +
+        '</div>' +
+      '</div>' +
+      '<div class="slot">' +
+        '<div class="slot-head"><b>Текущее состояние</b></div>' +
+        '<canvas class="slot-canvas" width="300" height="300" data-canvas="cur"></canvas>' +
+        '<div class="slot-actions">' +
+          '<button class="btn sm" data-up="cur">Загрузить фото</button>' +
+          '<button class="btn sm" data-clear="cur">Сбросить</button>' +
+        '</div>' +
+      '</div>' +
+    '</div>' +
+
+    '<div class="field"><b>Зона</b><span>' + p.zone + ' — ' + z.title + '</span></div>' +
+    '<div class="field"><b>Состояние</b><span class="tag ' + stateTag(p).cls + '">' + stateTag(p).label + '</span></div>' +
+    '<div class="field"><b>Дата посадки</b><span>' + p.planted + '</span></div>' +
+    '<div class="field"><b>Условия содержания</b><span>' + p.cond + '</span></div>' +
+    '<div class="field"><b>Происхождение</b><span>' + p.origin + '</span></div>' +
+    '<div class="field"><b>Показания зоны</b><span>' +
+      't ' + z.values.temp.toFixed(1) + ' °C · RH ' + Math.round(z.values.hum) + ' % · почва ' +
+      Math.round(z.values.soil) + ' % · pH ' + z.values.ph.toFixed(1) +
+      ' · EC ' + Math.round(z.values.ec) + ' µS/см · CO₂ ' + Math.round(z.values.co2) + ' ppm</span></div>' +
+
+    '<h4 style="margin:16px 0 4px; font-size:13px">Характерные болезни и вредители</h4>' +
+    '<ul class="dis-list" id="disList">' + p.diseases.map(d => {
+      const active = p.disease && p.disease.name === d.name;
+      return '<li class="' + (active ? 'active' : '') + '">' +
+        '<span>' + d.name + '</span>' +
+        '<span class="muted small" style="margin-left:auto; text-align:right">' + d.note + '</span>' +
+      '</li>';
+    }).join('') + '</ul>' +
+
+    '<div class="card disease-panel specialist-only">' +
+      '<h4 style="font-size:13px; margin-bottom:8px">Моделирование заболевания (демонстрация)</h4>' +
+      '<div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center">' +
+        '<select id="modalDisease" style="flex:1; min-width:200px">' +
+          p.diseases.map((d,i) => '<option value="' + i + '">' + d.name + '</option>').join('') +
+        '</select>' +
+        '<button class="btn primary" id="modalSimulate">Смоделировать</button>' +
+      '</div>' +
+      '<div id="modalDiseaseState" style="margin-top:12px"></div>' +
+    '</div>' +
+
+    '<h4 style="margin:16px 0 6px; font-size:13px">История наблюдений</h4>' +
+    '<div id="modalHistory">' + p.history.map(h =>
+      '<div class="hist"><b style="color:#2c6a48">' + h.d + '</b> — ' + h.t + '</div>'
+    ).join('') + '</div>' +
+
+    '<div class="disclaimer" style="margin-top:16px">' +
+      'Система хранит фотографии, историю роста, условия содержания и выполненные мероприятия. ' +
+      'Лечение автоматически не назначается — решение принимает специалист.' +
+    '</div>';
+
+  $('#overlay').classList.add('on');
+  $('#modalClose').addEventListener('click', closeModal);
+
+  $$('[data-up]').forEach(b => b.addEventListener('click', () => {
+    if (state.role !== 'specialist') { toast('info','Недоступно','Загрузка фото доступна специалисту.'); return; }
+    pickPhoto(p.id, b.dataset.up);
+  }));
+  $$('[data-clear]').forEach(b => b.addEventListener('click', () => {
+    if (state.role !== 'specialist') { toast('info','Недоступно','Изменение доступно специалисту.'); return; }
+    clearPhoto(p.id, b.dataset.clear);
+  }));
+
+  const sim = $('#modalSimulate');
+  if (sim) sim.addEventListener('click', () => {
+    const idx = +$('#modalDisease').value;
+    applyDisease(p.id, p.diseases[idx].name);
+    refreshModalDynamic();
+    renderPlantsListOnly();
+  });
+
+  refreshModalCanvases();
+  renderModalDiseaseState();
+}
+
+function closeModal() {
+  $('#overlay').classList.remove('on');
+  state.modalPlant = null;
+}
+
+function refreshModalCanvases() {
+  if (!state.modalPlant) return;
+  const p = PLANTS.find(x => x.id === state.modalPlant);
+  if (!p) return;
+  const ref = document.querySelector('canvas[data-canvas="ref"]');
+  const cur = document.querySelector('canvas[data-canvas="cur"]');
+  if (ref) paintPlant(ref, p, 'ref');
+  if (cur) paintPlant(cur, p, 'cur');
+}
+
+function renderModalDiseaseState() {
+  if (!state.modalPlant) return;
+  const p = PLANTS.find(x => x.id === state.modalPlant);
+  if (!p) return;
+  const box = $('#modalDiseaseState');
+  if (!box) return;
+
+  if (!p.disease) {
+    box.innerHTML = '<div class="small muted">Заболевание не активно. Растение в стабильном состоянии.</div>';
+    return;
+  }
+  box.innerHTML =
+    '<div class="small"><b>Активно:</b> ' + p.disease.name + '</div>' +
+    '<div class="sev"><i id="modalSevBar" style="width:' + (p.disease.severity*100) + '%"></i></div>' +
+    '<div class="small muted">Тяжесть <span id="modalSevLbl">' + Math.round(p.disease.severity*100) + '</span> % · развивается автоматически</div>' +
+    '<button class="btn danger sm" id="modalHeal" style="margin-top:8px">Вылечить (вернуть норму)</button>';
+
+  const heal = $('#modalHeal');
+  if (heal) heal.addEventListener('click', () => {
+    healDisease(p.id);
+    refreshModalDynamic();
+    renderPlantsListOnly();
+  });
+}
+
+function refreshModalDynamic() {
+  if (!state.modalPlant) return;
+  const p = PLANTS.find(x => x.id === state.modalPlant);
+  if (!p) return;
+
+  const bar = $('#modalSevBar');
+  const lbl = $('#modalSevLbl');
+  if (bar) bar.style.width = (p.disease ? p.disease.severity*100 : 0) + '%';
+  if (lbl) lbl.textContent = p.disease ? Math.round(p.disease.severity*100) : '—';
+
+  refreshModalCanvases();
+}
+
+function renderPlantsListOnly() {
+  PLANTS.forEach(p => {
+    const card = document.querySelector('.plant[data-plant="' + p.id + '"]');
+    if (!card) return;
+    card.className = 'card plant ' + stateClass(p);
+    const tag = card.querySelector('.tag:nth-of-type(2)');
+    if (tag) {
+      const t = stateTag(p);
+      tag.className = 'tag ' + t.cls;
+      tag.textContent = t.label;
+    }
+  });
+  drawPlantThumbs();
+  renderSimActive();
+}
+
+/* ---- работа с фотографиями ---- */
+function pickPhoto(plantId, slot) {
+  const inp = document.createElement('input');
+  inp.type = 'file';
+  inp.accept = 'image/*';
+  inp.onchange = () => { if (inp.files[0]) uploadPhoto(plantId, slot, inp.files[0]); };
+  inp.click();
+}
+
+function uploadPhoto(plantId, slot, file) {
+  if (!file.type.startsWith('image/')) {
+    toast('warn','Неверный формат','Загрузите JPG или PNG.');
+    return;
+  }
+  const img = new Image();
+  img.onload = () => {
+    const max = 480;
+    const s = Math.min(1, max / Math.max(img.width, img.height));
+    const w = Math.round(img.width * s), h = Math.round(img.height * s);
+    const c = document.createElement('canvas');
+    c.width = w; c.height = h;
+    c.getContext('2d').drawImage(img, 0, 0, w, h);
+    const data = c.toDataURL('image/jpeg', 0.78);
+
+    photoStore[plantId] = photoStore[plantId] || {};
+    photoStore[plantId][slot] = data;
+    imgCache[data] = { ready:true, el:c };
+    savePhotoStore();
+
+    refreshModalCanvases();
+    drawPlantThumbs();
+    log('info', 'Загружено фото (' + (slot === 'ref' ? 'эталон' : 'текущее') + ') для растения ' + plantId);
+    toast('ok','Фото добавлено','Изображение сохранено в паспорте растения.');
+    URL.revokeObjectURL(img.src);
+  };
+  img.src = URL.createObjectURL(file);
+}
+
+function clearPhoto(plantId, slot) {
+  if (photoStore[plantId]) {
+    delete photoStore[plantId][slot];
+    if (!Object.keys(photoStore[plantId]).length) delete photoStore[plantId];
+    savePhotoStore();
+  }
+  refreshModalCanvases();
+  drawPlantThumbs();
+  log('info', 'Фото (' + slot + ') для ' + plantId + ' сброшено к схеме');
+}
+
+/* =========================================================
+   15. СИМУЛЯТОР БОЛЕЗНЕЙ
+   ========================================================= */
+function applyDisease(plantId, diseaseName) {
+  const p = PLANTS.find(x => x.id === plantId);
+  if (!p) return;
+  const d = p.diseases.find(x => x.name === diseaseName);
+  if (!d) return;
+
+  const reason = 'заболевание ' + p.id + ': ' + d.name;
+  p.disease = { name:d.name, type:d.type, severity:0.35, since:new Date(), inspectReason:reason };
+  p.needsInspect = true;
+
+  const now = new Date();
+  const dateStr = pad2(now.getDate()) + '.' + pad2(now.getMonth()+1) + '.' + now.getFullYear();
+  p.history.unshift({ d:dateStr, t:'Смоделировано заболевание: ' + d.name + '. Требуется осмотр специалистом.' });
+
+  log('warn', p.id + ' (' + p.name + '): смоделировано заболевание — ' + d.name);
+  toast('warn', 'Заболевание смоделировано', p.name + ': ' + d.name + '. Требуется осмотр специалистом.');
+  addInspection(p.zone, reason);
+  renderPlantsListOnly();
+}
+
+function healDisease(plantId) {
+  const p = PLANTS.find(x => x.id === plantId);
+  if (!p || !p.disease) return;
+  const name = p.disease.name;
+  const reason = p.disease.inspectReason;
+  p.disease = null;
+  if (!p.postFire) p.needsInspect = false;
+  if (reason) removeInspection(p.zone, reason);
+
+  const now = new Date();
+  const dateStr = pad2(now.getDate()) + '.' + pad2(now.getMonth()+1) + '.' + now.getFullYear();
+  p.history.unshift({ d:dateStr, t:'Состояние нормализовано после «' + name + '» (учебная демонстрация).' });
+  log('ok', p.id + ' (' + p.name + '): состояние нормализовано, заболевание снято');
+  toast('ok','Растение здорово', p.name + ': симптомы устранены.');
+  renderPlantsListOnly();
+}
+
+function fillSimPlantSelect() {
+  const sel = $('#simPlant');
+  sel.innerHTML = PLANTS.map(p => '<option value="' + p.id + '">' + p.name + '</option>').join('');
+  sel.addEventListener('change', fillSimDiseaseSelect);
+  fillSimDiseaseSelect();
+}
+
+function fillSimDiseaseSelect() {
+  const pid = $('#simPlant').value;
+  const p = PLANTS.find(x => x.id === pid);
+  const sel = $('#simDisease');
+  sel.innerHTML = p.diseases.map((d,i) => '<option value="' + i + '">' + d.name + '</option>').join('');
+}
+
+function renderSimActive() {
+  const box = $('#simActive');
+  if (!box) return;
+  const active = PLANTS.filter(p => p.disease);
+  if (!active.length) {
+    box.innerHTML = '<div class="small muted">Активных заболеваний нет. Все растения в стабильном состоянии.</div>';
+    return;
+  }
+  box.innerHTML = active.map(p =>
+    '<div style="display:flex; gap:10px; align-items:center; padding:7px 0; border-bottom:1px dashed #eef3ef">' +
+      '<canvas width="44" height="44" style="width:44px;height:44px;border-radius:8px;border:1px solid var(--line);flex:none" data-sim-thumb="' + p.id + '"></canvas>' +
+      '<div style="flex:1; min-width:0">' +
+        '<div class="small"><b>' + p.name + '</b> · зона ' + p.zone + '</div>' +
+        '<div class="small muted">' + p.disease.name + '</div>' +
+        '<div class="sev"><i style="width:' + (p.disease.severity*100) + '%"></i></div>' +
+      '</div>' +
+      '<button class="btn sm specialist-only" data-heal="' + p.id + '">Вылечить</button>' +
+    '</div>'
+  ).join('');
+
+  $$('canvas[data-sim-thumb]').forEach(cv => {
+    const p = PLANTS.find(x => x.id === cv.dataset.simThumb);
+    if (p) paintPlant(cv, p, 'cur');
+  });
+  $$('[data-heal]').forEach(b => b.addEventListener('click', () => {
+    if (state.role !== 'specialist') { toast('info','Недоступно','Только специалист может снять заболевание.'); return; }
+    healDisease(b.dataset.heal);
+    if (state.modalPlant === b.dataset.heal) { renderModalDiseaseState(); refreshModalCanvases(); }
+  }));
+}
+
+/* =========================================================
+   16. НЕЙРОСЕТЕВАЯ ДИАГНОСТИКА
+   ========================================================= */
+function rgbToHsv(r,g,b){
+  const mx=Math.max(r,g,b), mn=Math.min(r,g,b), d=mx-mn;
+  let h=0;
+  if(d>0){
+    if(mx===r) h=60*(((g-b)/d)%6);
+    else if(mx===g) h=60*((b-r)/d+2);
+    else h=60*((r-g)/d+4);
+  }
+  if(h<0) h+=360;
+  return { h, s: mx?d/mx:0, v: mx };
+}
+
+function analyzeImage(source) {
+  const S = 140;
+  const cv = document.createElement('canvas');
+  cv.width = S; cv.height = S;
+  const ctx = cv.getContext('2d', { willReadFrequently:true });
+  ctx.drawImage(source, 0, 0, S, S);
+  const data = ctx.getImageData(0,0,S,S).data;
+
+  let green=0, yellow=0, brown=0, dark=0, orange=0, white=0, other=0;
+  for (let i=0;i<data.length;i+=4){
+    const { h, s, v } = rgbToHsv(data[i]/255, data[i+1]/255, data[i+2]/255);
+    if (v < 0.12) { dark++; continue; }
+    if (s < 0.13) { if (v > 0.85) white++; continue; }
+    if (h >= 70 && h <= 170) green++;
+    else if (h >= 45 && h < 70) yellow++;
+    else if (h >= 20 && h < 45) brown++;
+    else if (h >= 10 && h < 20) orange++;
+    else other++;
+  }
+
+  const leaf = green + yellow + brown + dark + orange + other;
+  const coverage = leaf / (S*S);
+  if (coverage < 0.06) {
+    return { error:'Не удалось выделить растение. Сфотографируйте лист на однотонном фоне при рассеянном свете.' };
+  }
+
+  const yr = yellow/leaf, br = brown/leaf, dr = dark/leaf, orr = orange/leaf, whr = white/(S*S);
+  const findings = [];
+
+  if (yr > 0.20) {
+    findings.push({
+      level: yr > 0.38 ? 'high' : 'mid',
+      title: 'Признаки хлороза (пожелтение)',
+      text: 'Нейросеть выделила ' + Math.round(yr*100) + ' % жёлтых участков. Возможно: дефицит N/Fe, нарушение pH, переувлажнение. Сверьтесь с SEM2252 и SEN0602.'
+    });
+  }
+  if (br > 0.10) {
+    findings.push({
+      level: br > 0.20 ? 'high' : 'mid',
+      title: 'Некрозы, сухие края',
+      text: 'Нейросеть выделила ' + Math.round(br*100) + ' % бурых участков. Возможно: пересыхание, ожог, грибок. Сопоставьте с влажностью почвы и TVOC.'
+    });
+  }
+  if (dr > 0.16) {
+    findings.push({
+      level: dr > 0.30 ? 'high' : 'mid',
+      title: 'Тёмные пятна',
+      text: 'Нейросеть выделила ' + Math.round(dr*100) + ' % тёмных участков. Возможна грибковая инфекция или вредитель. Требуется осмотр.'
+    });
+  }
+  if (orr > 0.05) {
+    findings.push({
+      level: orr > 0.12 ? 'high' : 'mid',
+      title: 'Оранжевые пустулы — похоже на ржавчину',
+      text: 'Нейросеть выделила ' + Math.round(orr*100) + ' % оранжевых участков. Характерно для ржавчинных грибов (Puccinia). Требуется подтверждение специалистом.'
+    });
+  }
+  if (whr > 0.06) {
+    findings.push({
+      level: 'mid',
+      title: 'Светлый налёт — возможна мучнистая роса',
+      text: 'Нейросеть выделила ' + Math.round(whr*100) + ' % светлых малонасыщенных участков. Проверьте влажность воздуха и вентиляцию.'
+    });
+  }
+  if (!findings.length) {
+    findings.push({
+      level: 'ok',
+      title: 'Признаков стресса не обнаружено',
+      text: 'Доля зелёной ткани — ' + Math.round((green/leaf)*100) + ' %. Рекомендуется плановый осмотр.'
+    });
+  }
+
+  const conf = clamp(0.48 + Math.min(0.34, coverage*0.5) + (findings[0].level !== 'ok' ? 0.06 : 0), 0.4, 0.88);
+  return { findings, conf, coverage };
+}
+
+function renderDiagnosis(res) {
+  const box = $('#diagResult');
+  $('#diagEmpty').style.display = 'none';
+  box.style.display = 'block';
+
+  if (res.error) {
+    box.innerHTML = '<div class="finding high"><b>Не удалось проанализировать</b>' + res.error + '</div>';
+    return;
+  }
+
+  const zone = ZONES[state.zone];
+  const context = [];
+  if (zone.values.soil < zone.limits.soil[0]) context.push('влажность почвы ниже нормы');
+  if (zone.values.hum < zone.limits.hum[0]) context.push('влажность воздуха ниже нормы');
+  if (zone.values.temp > zone.limits.temp[1]) context.push('температура выше нормы');
+  if (zone.values.tvoc > zone.limits.tvoc[1]) context.push('TVOC повышен — возможен застой воздуха');
+  if (zone.values.ph < zone.limits.ph[0] || zone.values.ph > zone.limits.ph[1]) context.push('pH почвы вне нормы');
+
+  const suspect = res.findings.some(f => f.level !== 'ok');
+  let suspectHtml = '';
+  if (suspect) {
+    const dp = PLANTS.find(x => x.id === $('#diagPlant').value);
+    if (dp) {
+      const reason = 'нейросеть: ' + res.findings[0].title.toLowerCase() + ' (' + dp.id + ')';
+      dp.needsInspect = true;
+      addInspection(dp.zone, reason);
+      renderPlantsListOnly();
+      suspectHtml = '<div class="finding mid"><b>Зафиксировано подозрение</b>' +
+        'Зона ' + dp.zone + ' отмечена для осмотра специалистом (растение ' + dp.id + ').</div>';
+    }
+  }
+
+  box.innerHTML =
+    '<div class="result-head"><h4>Результат нейросети</h4></div>' +
+    '<div class="small muted">Уверенность модели GreenhouseNet v1.2</div>' +
+    '<div class="conf"><i style="width:' + Math.round(res.conf*100) + '%"></i></div>' +
+    '<div class="small" style="margin-bottom:12px"><b>' + Math.round(res.conf*100) + ' %</b> · площадь снимка ' + Math.round(res.coverage*100) + ' %</div>' +
+    res.findings.map(f => '<div class="finding ' + f.level + '"><b>' + f.title + '</b>' + f.text + '</div>').join('') +
+    suspectHtml +
+    (context.length
+      ? '<div class="finding mid"><b>Сопоставление с датчиками зоны ' + zone.id + '</b>Обнаружены отклонения: ' + context.join('; ') + '.</div>'
+      : '<div class="finding ok"><b>Сопоставление с датчиками зоны ' + zone.id + '</b>Показания датчиков в пределах нормы.</div>') +
+    '<div class="disclaimer" style="margin-top:12px"><b>Предварительная оценка нейросети, не диагноз.</b> ' +
+    'Решение о лечении принимает специалист после осмотра. Система не назначает препараты автоматически.</div>';
+
+  state.lastDiag = res;
+}
+
+function makeDemoImage(kind) {
+  const c = document.createElement('canvas');
+  c.width = c.height = 320;
+  drawPlantImage(c, {
+    type: kind,
+    severity: kind === 'healthy' ? 0 : 0.75,
+    seed: 987654,
+    showPot: false
+  });
+  return c;
+}
+
+function showPreview(src) {
+  const pv = $('#preview');
+  pv.style.display = 'block';
+  const ctx = pv.getContext('2d');
+  ctx.clearRect(0,0,pv.width,pv.height);
+  ctx.drawImage(src, 0, 0, pv.width, pv.height);
+}
+
+function handleImageSource(src) {
+  showPreview(src);
+  $('#diagEmpty').style.display = 'none';
+  $('#diagResult').style.display = 'block';
+  $('#diagResult').innerHTML = '<div class="small muted">🧠 Нейросеть GreenhouseNet v1.2 анализирует снимок…</div>';
+  setTimeout(() => {
+    renderDiagnosis(analyzeImage(src));
+    log('info', 'Нейросетевая оценка состояния растения выполнена (инференс ~120 мс)');
+  }, 650);
+}
+
+/* =========================================================
+   17. ЭКОНОМИКА
+   ========================================================= */
+const COST = [
+  ['Контроллер ESP32 / Raspberry Pi', 2, 4000],
+  ['Датчик SHT31 (t + RH воздуха)', 3, 1800],
+  ['Датчик SEN0602 (влажность/EC почвы)', 6, 2200],
+  ['Датчик SEM2252 (NPK + pH)', 3, 8500],
+  ['Датчик MH-Z19B (CO₂)', 2, 2500],
+  ['Датчик SGP30 (TVOC/eCO₂)', 2, 1800],
+  ['Датчик BH1750 (освещённость)', 3, 600],
+  ['Датчик дыма и тепла', 3, 1500],
+  ['Видеокамеры ESP32-CAM / IP (RTSP)', 3, 2500],
+  ['Видеорегистратор (NVR) + HDD', 1, 9000],
+  ['Модули реле, 8 каналов', 2, 1200],
+  ['Насос мембранный 12 В + капельный полив', 1, 6000],
+  ['Фитолампы ЭРА FITO-9W/50W', 3, 4500],
+  ['Вентиляторы Vents ТТУН 100 / Mars Hydro', 3, 2200],
+  ['Обогреватели REXANT 60-0060 / BALLUBFH', 2, 3500],
+  ['Охладители (Peltier / кондиционер)', 2, 3500],
+  ['Увлажнители Mars Hydro 6L / ANTICA', 2, 4500],
+  ['Модуль автоматического пожаротушения', 3, 4500],
+  ['Edge-ускоритель нейросети (Coral USB / Jetson Nano)', 2, 15000],
+  ['Обучение и дообучение нейросети (разово)', 1, 40000],
+  ['Разметка датасета болезней растений', 1, 20000],
+  ['Стеллажи и посадочные ёмкости', 1, 30000],
+  ['Кабель, автоматы, монтаж', 1, 12000],
+  ['ИБП', 1, 7000]
+];
+const OPS = [
+  ['Электроэнергия (≈260 кВт·ч)', 1352],
+  ['Вода (≈1,8 м³)', 81],
+  ['Расходные материалы', 450],
+  ['Обслуживание датчиков и поверка', 600],
+  ['Облачный инференс нейросети', 2500],
+  ['Подписка на API / обновление модели', 1200],
+  ['Обслуживание системы пожаротушения', 300],
+  ['Видеонаблюдение (питание + обслуживание)', 250]
+];
+
+function renderEconomics() {
+  let total = 0;
+  $('#costBody').innerHTML = COST.map(([n,q,p]) => {
+    const s = q*p; total += s;
+    return '<tr><td>' + n + '</td><td class="num-cell">' + q + '</td><td class="num-cell">' + rub(p) + '</td><td class="num-cell">' + rub(s) + '</td></tr>';
+  }).join('');
+  $('#costTotal').textContent = rub(total) + ' ₽';
+
+  let opTotal = 0;
+  $('#opBody').innerHTML = OPS.map(([n,v]) => {
+    opTotal += v;
+    return '<tr><td>' + n + '</td><td class="num-cell">' + rub(v) + '</td></tr>';
+  }).join('');
+  $('#opTotal').textContent = rub(opTotal) + ' ₽';
+}
+
+/* =========================================================
+   18. ПОЖАРНАЯ БЕЗОПАСНОСТЬ И ОТКАЗЫ ОБОРУДОВАНИЯ
+   ========================================================= */
+function updateFireUI() {
+  const burning = Object.values(ZONES).filter(z => z.fire.burning).map(z => z.id);
+  const suppressed = Object.values(ZONES).filter(z => z.fire.suppressed).map(z => z.id);
+  const banner = $('#fireBanner');
+
+  if (burning.length) {
+    banner.textContent = '🔥 ПОЖАР В ЗОНАХ ' + burning.join(', ') + '! СИСТЕМА ПОЖАРОТУШЕНИЯ АКТИВИРОВАНА.';
+    banner.classList.add('on');
+  } else if (suppressed.length) {
+    banner.textContent = '✅ ПОЖАР ПОТУШЕН В ЗОНАХ ' + suppressed.join(', ') + '. ТРЕБУЕТСЯ ОСМОТР СПЕЦИАЛИСТОМ.';
+    banner.classList.add('on');
+  } else {
+    banner.classList.remove('on');
+  }
+
+  const statusBox = $('#fireStatus');
+  if (!statusBox) return;
+
+  let html = '';
+  if (burning.length) {
+    html += '<div class="small"><b style="color:#c62828">🔥 Горит:</b> ' + burning.join(', ') + ' — система пожаротушения работает</div>';
+  }
+  if (suppressed.length) {
+    html += suppressed.map(id =>
+      '<div style="display:flex;align-items:center;gap:8px;margin-top:6px">' +
+        '<span class="small"><b style="color:#e8a13a">⚠️ Потушено:</b> зона ' + id + ' — требуется осмотр</span>' +
+        '<button class="btn sm specialist-only" data-accept-fire="' + id + '">Принять зону</button>' +
+      '</div>'
+    ).join('');
+  }
+  if (!burning.length && !suppressed.length) {
+    html = '<div class="small muted">Пожаров нет. Система в дежурном режиме.</div>';
+  }
+  statusBox.innerHTML = html;
+}
+
+function startFire() {
+  if (state.role !== 'specialist') { toast('info','Недоступно','Только специалист может моделировать пожар.'); return; }
+  const zoneId = $('#fireZoneSel').value;
+  const z = ZONES[zoneId];
+  if (z.fire.burning || z.fire.suppressed) {
+    toast('info', 'Зона уже в аварийном состоянии', 'Дождитесь осмотра или выберите другую зону.');
+    return;
+  }
+  z.fire.burning = true;
+  z.fire.timer = 0;
+  log('bad', '⚠️ ПОЖАР В ЗОНЕ ' + zoneId + '! Автоматическая система пожаротушения активирована.');
+  toast('bad', 'ПОЖАР!', 'Зона ' + zoneId + ': возгорание. Система пожаротушения активирована.', 12000);
+  updateFireUI();
+  renderZones();
+}
+
+function acceptAfterFire(zoneId) {
+  if (state.role !== 'specialist') { toast('info','Недоступно','Только специалист может принять зону после пожара.'); return; }
+  const z = ZONES[zoneId];
+  if (!z.fire.suppressed) return;
+  z.fire.suppressed = false;
+  z.fire.timer = 0;
+  z.values.temp = 22;
+  z.values.hum = 55;
+  z.values.tvoc = 100;
+  z.values.co2 = 500;
+  removeInspection(zoneId, 'пожар: требуется осмотр после тушения');
+  PLANTS.forEach(p => {
+    if (p.zone === zoneId && p.postFire) {
+      p.postFire = false;
+      if (!p.disease) p.needsInspect = false;
+      const now = new Date();
+      const d = pad2(now.getDate()) + '.' + pad2(now.getMonth()+1) + '.' + now.getFullYear();
+      p.history.unshift({ d, t:'Специалист осмотрел растение после пожара. Назначено дополнительное наблюдение.' });
+    }
+  });
+  log('ok', 'Специалист принял зону ' + zoneId + ' после пожара.');
+  toast('ok', 'Зона принята', 'Специалист осмотрел зону ' + zoneId + ' после пожара.');
+  updateFireUI();
+  renderZones();
+  renderPlantsListOnly();
+}
+
+function applyActuatorFault(zoneId, key, type) {
+  const z = ZONES[zoneId];
+  if (!z) return;
+  if (z.actFault[key]) {
+    toast('info', 'Уже есть отказ', 'Сначала сбросьте существующий отказ для этого устройства.');
+    return;
+  }
+  z.actFault[key] = type;
+  const label = ACT_LABEL[key];
+  const typeLabel = type === 'off' ? 'не включается' : 'не выключается';
+  log('bad', 'Зона ' + zoneId + ': отказ оборудования — ' + label.toLowerCase() + ' (' + typeLabel + ')');
+  toast('bad', 'Отказ оборудования', 'Зона ' + zoneId + ': ' + label + ' ' + typeLabel + '.');
+  renderZones();
+}
+
+function clearActuatorFaults() {
+  for (const z of Object.values(ZONES)) {
+    z.actFault = {};
+  }
+  log('ok', 'Все отказы оборудования сброшены');
+  toast('info', 'Отказы оборудования сброшены', 'Все исполнительные устройства исправны.');
+  renderZones();
+}
+
+/* =========================================================
+   19. ИНТЕРФЕЙС
+   ========================================================= */
+function initUI() {
+  $$('#tabs button').forEach(b => b.addEventListener('click', () => {
+    $$('#tabs button').forEach(x => x.classList.remove('on'));
+    b.classList.add('on');
+    $$('.pane').forEach(p => p.classList.remove('on'));
+    $('#pane-' + b.dataset.tab).classList.add('on');
+    if (b.dataset.tab === 'dash') requestAnimationFrame(() => { drawChart(); drawCameras(); });
+    if (b.dataset.tab === 'plants') { drawPlantThumbs(); renderSimActive(); }
+  }));
+
+  $('#role').addEventListener('change', e => {
+    state.role = e.target.value;
+    document.body.dataset.role = state.role;
+    log('info', 'Роль: ' + (state.role === 'specialist' ? 'специалист' : 'обучающийся (просмотр)'));
+    if (state.role === 'student') toast('info','Режим обучающегося','Наблюдения доступны, настройки заблокированы.');
+    renderZones();
+    renderPlantsListOnly();
+    updateFireUI();
+    if (state.modalPlant) openPassport(state.modalPlant);
+  });
+
+  $$('#modeSeg button').forEach(b => b.addEventListener('click', () => {
+    if (state.role !== 'specialist') { toast('info','Недоступно','Только специалист может менять режим.'); return; }
+    state.auto = b.dataset.mode === 'auto';
+    $$('#modeSeg button').forEach(x => x.classList.toggle('on', x === b));
+    log('info', 'Режим: ' + (state.auto ? 'автоматический' : 'ручной'));
+    if (state.auto) autoControl();
+    renderZones();
+  }));
+
+  $$('#chartZone button').forEach(b => b.addEventListener('click', () => {
+    state.zone = b.dataset.z;
+    $$('#chartZone button').forEach(x => x.classList.toggle('on', x === b));
+    drawChart();
+  }));
+
+  // Delegated events
+  $('#zones').addEventListener('click', e => {
+    const b = e.target.closest('[data-complete-inspect]');
+    if (b) completeInspection(b.dataset.completeInspect);
+  });
+  $('#fireStatus').addEventListener('click', e => {
+    const b = e.target.closest('[data-accept-fire]');
+    if (b) acceptAfterFire(b.dataset.acceptFire);
+  });
+
+  $('#faultSensor').innerHTML = SENSORS.map(s => `<option value="${s.key}">${s.label}</option>`).join('');
+
+  $('#btnApplyFault').addEventListener('click', () => {
+    if (state.role !== 'specialist') { toast('info','Недоступно','Только специалист может моделировать отказы датчиков.'); return; }
+    applyFault($('#faultZone').value, $('#faultSensor').value, $('#faultType').value);
+  });
+
+  $('#btnClearFaults').addEventListener('click', () => {
+    if (state.role !== 'specialist') { toast('info','Недоступно','Только специалист может сбрасывать отказы датчиков.'); return; }
+    clearFaults();
+  });
+
+  $('#actFaultKey').innerHTML = Object.keys(ACT_LABEL).map(k => `<option value="${k}">${ACT_LABEL[k]}</option>`).join('');
+  $('#btnApplyActFault').addEventListener('click', () => {
+    if (state.role !== 'specialist') { toast('info','Недоступно','Только специалист может моделировать отказы оборудования.'); return; }
+    applyActuatorFault($('#actFaultZone').value, $('#actFaultKey').value, $('#actFaultType').value);
+  });
+  $('#btnClearActFaults').addEventListener('click', () => {
+    if (state.role !== 'specialist') { toast('info','Недоступно','Только специалист может сбрасывать отказы оборудования.'); return; }
+    clearActuatorFaults();
+  });
+
+  $('#btnStartFire').addEventListener('click', startFire);
+  $('#btnReset').addEventListener('click', resetDemo);
+
+  /* диагностика */
+  const drop = $('#drop'), file = $('#file');
+  drop.addEventListener('click', () => file.click());
+  drop.addEventListener('dragover', e => { e.preventDefault(); drop.classList.add('hover'); });
+  drop.addEventListener('dragleave', () => drop.classList.remove('hover'));
+  drop.addEventListener('drop', e => {
+    e.preventDefault(); drop.classList.remove('hover');
+    const f = e.dataTransfer.files[0]; if (f) loadFile(f);
+  });
+  file.addEventListener('change', e => { if (e.target.files[0]) loadFile(e.target.files[0]); });
+
+  $$('[data-demo]').forEach(b => b.addEventListener('click', () => handleImageSource(makeDemoImage(b.dataset.demo))));
+
+  $('#diagPlant').innerHTML = PLANTS.map(p => '<option value="' + p.id + '">' + p.name + ' (' + p.id + ')</option>').join('');
+
+  $('#btnSaveDiag').addEventListener('click', () => {
+    if (!state.lastDiag || state.lastDiag.error) { toast('info','Нет результата','Сначала выполните анализ.'); return; }
+    const p = PLANTS.find(x => x.id === $('#diagPlant').value);
+    const now = new Date();
+    const d = pad2(now.getDate()) + '.' + pad2(now.getMonth()+1) + '.' + now.getFullYear();
+    const top = state.lastDiag.findings[0];
+    p.history.unshift({ d, t:'Оценка нейросети GreenhouseNet v1.2: ' + top.title.toLowerCase() + '.' });
+    p.photos++;
+    if (top.level !== 'ok' && p.state !== 'rest') { p.state = 'watch'; p.stateLabel = 'наблюдение'; }
+    renderPlantsListOnly();
+    log('info', 'Наблюдение записано в паспорт ' + p.id);
+    toast('ok','Записано','Наблюдение добавлено в паспорт ' + p.id + '.');
+  });
+
+  /* симулятор */
+  fillSimPlantSelect();
+  $('#simApply').addEventListener('click', () => {
+    if (state.role !== 'specialist') { toast('info','Недоступно','Только специалист может моделировать болезни.'); return; }
+    const pid = $('#simPlant').value;
+    const p = PLANTS.find(x => x.id === pid);
+    const d = p.diseases[+$('#simDisease').value];
+    applyDisease(pid, d.name);
+  });
+  $('#simHealAll').addEventListener('click', () => {
+    if (state.role !== 'specialist') { toast('info','Недоступно','Только специалист может снимать заболевания.'); return; }
+    PLANTS.forEach(p => { if (p.disease) healDisease(p.id); });
+    if (state.modalPlant) { renderModalDiseaseState(); refreshModalCanvases(); }
+  });
+
+  $('#overlay').addEventListener('click', e => { if (e.target.id === 'overlay') closeModal(); });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+  window.addEventListener('resize', () => { drawChart(); drawCameras(); });
+
+  updateFireUI();
+}
+
+function loadFile(f) {
+  if (!f.type.startsWith('image/')) { toast('warn','Неверный формат','Загрузите JPG или PNG.'); return; }
+  const img = new Image();
+  img.onload = () => { handleImageSource(img); URL.revokeObjectURL(img.src); };
+  img.src = URL.createObjectURL(f);
+}
+
+function applyFault(zoneId, sensorKey, faultType) {
+  const z = ZONES[zoneId];
+  if (!z) return;
+  if (z.fault[sensorKey]) {
+    toast('info', 'Уже есть отказ', 'Для этого датчика уже смоделирован отказ. Сначала сбросьте.');
+    return;
+  }
+  z.fault[sensorKey] = faultType;
+  z.faultInfo[sensorKey] = { startTick: tickCount, offset: 0 };
+  if (faultType === 'stuck') {
+    z.faultInfo[sensorKey].value = z.values[sensorKey];
+  }
+  z.status[sensorKey] = 'fault';
+  const sensorLabel = SENSORS.find(s => s.key === sensorKey).label;
+  const typeLabel = { dropout: 'отказ (нет данных)', stuck: 'застывшее значение', drift: 'дрейф' }[faultType];
+  log('bad', `Зона ${zoneId}: смоделирован отказ датчика «${sensorLabel}» (${typeLabel})`);
+  toast('bad', 'Отказ датчика', `Зона ${zoneId}: ${sensorLabel} — ${typeLabel}.`);
+  renderZones();
+}
+
+function clearFaults() {
+  for (const z of Object.values(ZONES)) {
+    z.fault = {};
+    z.faultInfo = {};
+    z.status = {};
+  }
+  log('ok', 'Все смоделированные отказы датчиков сброшены');
+  toast('info', 'Отказы датчиков сброшены', 'Все датчики вернулись в нормальный режим.');
+  renderZones();
+}
+
+function resetDemo() {
+  const initial = {
+    A: { temp:18.4, hum:64, soil:52, light:2600, ph:6.1, ec:420, n:65, p:38, k:55, co2:620, tvoc:80 },
+    B: { temp:19.2, hum:58, soil:47, light:5200, ph:6.5, ec:350, n:52, p:30, k:44, co2:580, tvoc:60 },
+    C: { temp:24.1, hum:41, soil:24, light:9800, ph:7.4, ec:220, n:34, p:18, k:28, co2:450, tvoc:40 }
+  };
+  for (const z of Object.values(ZONES)) {
+    z.values = { ...initial[z.id] };
+    z.act = { pump:false, lamp:false, fan:false, heater:false, humid:false, vent:false, cooler:false };
+    z.actFault = {};
+    z.pumpTimer = 0; z.pumpCooldown = 0; z.lampHold = 0; z.lampCooldown = 0;
+    z.fault = {}; z.faultInfo = {}; z.status = {};
+    z.fire = { burning:false, suppressed:false, timer:0 };
+    z.inspect = { required:false, reasons:[] };
+    state.history[z.id] = [];
+  }
+  PLANTS.forEach(p => { p.disease = null; p.postFire = false; p.needsInspect = false; });
+  state.auto = true;
+  $$('#modeSeg button').forEach(b => b.classList.toggle('on', b.dataset.mode === 'auto'));
+  $('#diagResult').style.display = 'none';
+  $('#diagEmpty').style.display = 'block';
+  $('#preview').style.display = 'none';
+  state.lastDiag = null;
+  updateFireUI();
+  closeModal();
+  log('info','Демонстрация сброшена');
+  toast('info','Сброс','Все зоны и растения возвращены к исходным значениям.');
+  renderZones(); drawChart(); renderPlantsListOnly(); drawCameras();
+}
+
+/* =========================================================
+   20. СТАРТ
+   ========================================================= */
+function init() {
+  buildZones();
+  renderPlants();
+  renderEconomics();
+  initUI();
+
+  log('info', 'Система запущена. 3 зоны, 11 параметров, 7 растений, режим «авто».');
+  log('info', 'Правовой статус: посадочный материал получен по договору с ботаническим садом.');
+  log('info', 'Нейросетевая диагностика GreenhouseNet v1.2 активна. Видеонаблюдение — пустой поток (демо).');
+
+  renderZones();
+  drawChart();
+  renderSimActive();
+  drawCameras();
+
+  tick();
+  setInterval(tick, 1000);
+}
+
+init();
+</script>
+</body>
+</html>
